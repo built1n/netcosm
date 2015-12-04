@@ -18,7 +18,7 @@
 
 #include "netcosm.h"
 
-#define PORT 1234
+#define PORT 1333
 #define BACKLOG 16
 
 void __attribute__((noreturn)) error(const char *fmt, ...)
@@ -33,6 +33,8 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
     exit(EXIT_FAILURE);
 }
 
+int num_clients = 0;
+
 void sigchld_handler(int s)
 {
     // waitpid() might overwrite errno, so we save and restore it:
@@ -41,6 +43,8 @@ void sigchld_handler(int s)
     while(waitpid(-1, NULL, WNOHANG) > 0);
 
     errno = saved_errno;
+
+    --num_clients;
 }
 
 int port;
@@ -68,6 +72,7 @@ void sigint_handler(int sig)
 int main(int argc, char *argv[])
 {
     port = PORT;
+    srand(time(0));
     int sock = socket(AF_INET, SOCK_STREAM, 0);
 
     if(sock<0)
@@ -104,8 +109,6 @@ int main(int argc, char *argv[])
 
     signal(SIGINT, sigint_handler);
 
-    int num_clients = 0;
-
     if(access(USERFILE, F_OK) < 0)
         first_run_setup();
 
@@ -114,25 +117,24 @@ int main(int argc, char *argv[])
     while(1)
     {
         struct sockaddr_in client;
-        socklen_t client_len;
+        socklen_t client_len = sizeof(client);
         int new_sock = accept(sock, (struct sockaddr*) &client, &client_len);
         if(new_sock < 0)
             error("accept");
 
+        ++num_clients;
+
         pid_t pid = fork();
         if(pid < 0)
             error("fork");
+
         if(!pid)
         {
             close(sock);
 
             server_socket = new_sock;
 
-            ++num_clients;
-
             handle_client(new_sock, &client, num_clients);
-
-            --num_clients;
 
             exit(0);
         }

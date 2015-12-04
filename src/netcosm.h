@@ -18,6 +18,7 @@
 
 #define USERFILE "users.dat"
 #define MAX_FAILURES 3
+#define NETCOSM_VERSION "v0.1"
 
 struct authinfo_t {
     bool success;

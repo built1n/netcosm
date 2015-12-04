@@ -18,7 +18,7 @@
 
 #include "netcosm.h"
 
-#define PORT 1333
+#define PORT 1234
 #define BACKLOG 16
 
 void __attribute__((noreturn)) error(const char *fmt, ...)
@@ -37,6 +37,7 @@ int num_clients = 0;
 
 void sigchld_handler(int s)
 {
+    printf("Client disconnect.\n");
     // waitpid() might overwrite errno, so we save and restore it:
     int saved_errno = errno;
 
@@ -71,7 +72,10 @@ void sigint_handler(int sig)
 
 int main(int argc, char *argv[])
 {
-    port = PORT;
+    if(argc != 2)
+        port = PORT;
+    else
+        port = strtol(argv[1], NULL, 0);
     srand(time(0));
     int sock = socket(AF_INET, SOCK_STREAM, 0);
 

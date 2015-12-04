@@ -37,8 +37,14 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
     char *ip = inet_ntoa(addr->sin_addr);
     printf("New client %s\n", ip);
     printf("Total clients: %d\n", total);
-    out("Hello %s.\n", ip);
-    out("Please authenticate to continue.\n\n");
+
+    out("NetCosm " NETCOSM_VERSION "\n");
+    if(total > 1)
+        out("%d clients connected.\n", total);
+    else
+        out("%d client connected.\n", total);
+
+    out("\nPlease authenticate to continue.\n\n");
 
     int failures = 0;
 
@@ -47,7 +53,7 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
     /* auth loop */
     while(1)
     {
-        out("NetCosm login: ");
+        out("login: ");
         char *user = client_read();
         out("Password: ");
         char *pass = client_read();

@@ -178,6 +178,8 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
     flock(fileno(f), LOCK_SH);
 
     struct authinfo_t ret;
+    ret.success = false;
+    ret.authlevel = -1;
 
     while(1)
     {

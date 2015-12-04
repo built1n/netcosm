@@ -17,7 +17,15 @@
 #include <unistd.h>
 
 #define USERFILE "users.dat"
+#define MAX_FAILURES 3
+
+struct authinfo_t {
+    bool success;
+    const char *user;
+    int authlevel; /* 0 = highest */
+};
 
 void client_main(int fd, struct sockaddr_in *addr, int);
 void __attribute__((noreturn)) error(const char *fmt, ...);
 void first_run_setup(void);
+struct authinfo_t auth_check(const char*, const char*);

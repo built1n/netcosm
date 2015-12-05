@@ -1,40 +1,41 @@
 #include "netcosm.h"
 
-#define SALT_LEN 8
+#define SALT_LEN 12
 
-#define ALGO GCRY_MD_SHA1
+#define ALGO GCRY_MD_SHA512
 
-/* add a user to the on-disk database */
-
-/*
- * format:
- *  { [username]:[salt]:[hash]:[authlevel]\n } [N]
-*/
+#define HASH_ITERS 10
 
 static bool valid_login_name(const char *name);
 
-static void add_user_append(int fd, const char *name, const char *pass, int authlevel)
+/* returns a pointer to a malloc-allocated buffer containing the salted hex hash of pass */
+/* salt should point to a buffer containing SALT_LEN random characters */
+/* pass must be null-terminated */
+static char *hash_pass_hex(const char *pass, const char *salt)
 {
-    if(errno < 0)
-        perror("unknown");
     size_t pass_len = strlen(pass);
 
-    /* salt */
-    char *salted = malloc(pass_len + SALT_LEN + 1);
-    char salt[SALT_LEN + 1];
-    for(int i = 0; i < SALT_LEN; ++i)
-    {
-        salted[i] = salt[i] = 'A' + rand()%26;
-    }
-    salt[SALT_LEN] = '\0';
-
+    char *salted = gcry_malloc_secure(pass_len + SALT_LEN + 1);
+    memcpy(salted, salt, SALT_LEN);
     memcpy(salted + SALT_LEN, pass, pass_len);
     salted[pass_len + SALT_LEN] = '\0';
 
     unsigned int hash_len = gcry_md_get_algo_dlen(ALGO);
-    unsigned char *hash = malloc(hash_len);
+    unsigned char *hash = gcry_malloc_secure(hash_len);
+
     gcry_md_hash_buffer(ALGO, hash, salted, pass_len + SALT_LEN);
-    free(salted);
+
+    unsigned char *tmp = gcry_malloc_secure(hash_len);
+    /* now hash the hash half a million times to slow things down */
+    for(int i = 0; i < HASH_ITERS - 1; ++i)
+    {
+        memcpy(tmp, hash, hash_len);
+        gcry_md_hash_buffer(ALGO, hash, tmp, hash_len);
+    }
+    gcry_free(tmp);
+
+    memset(salted, 0, pass_len + SALT_LEN + 1);
+    gcry_free(salted);
 
     /* convert to hex */
     char *hex = malloc(hash_len * 2 + 1);
@@ -42,28 +43,46 @@ static void add_user_append(int fd, const char *name, const char *pass, int auth
     for(unsigned int i = 0; i < hash_len; ++i, ptr += 2)
         snprintf(ptr, 3, "%02x", hash[i]);
 
-    free(hash);
+    gcry_free(hash);
+
+    return hex;
+}
+
+static void add_user_append(int fd, const char *name, const char *pass, int authlevel)
+{
+    char salt[SALT_LEN + 1];
+    for(int i = 0; i < SALT_LEN; ++i)
+    {
+        salt[i] = 'A' + rand()%26;
+    }
+    salt[SALT_LEN] = '\0';
+
+    char *hex = hash_pass_hex(pass, salt);
 
     /* write */
     flock(fd, LOCK_EX);
     if(dprintf(fd, "%s:%s:%s:%d\n", name, salt, hex, authlevel) < 0)
         perror("dprintf");
-    printf("writing %s:%s:%s:%d\n", name, salt, hex, authlevel);
     flock(fd, LOCK_UN);
 
     close(fd);
     free(hex);
-    perror("add_user_append");
 }
 
 /* writes the contents of USERFILE to a temp file, and return its path, which is statically allocated */
-static char *remove_user_internal(const char *user, int *found)
+static int remove_user_internal(const char *user, int *found, char **filename)
 {
     FILE *in_fd = fopen(USERFILE, "a+");
-    static char tmp[] = "userlist_tmp.XXXXXX";
+    static char tmp[32];
+    const char *template = "userlist_tmp.XXXXXX";
+    strncpy(tmp, template, sizeof(tmp));
+
     int out_fd = mkstemp(tmp);
+
     if(found)
         *found = 0;
+    if(filename)
+        *filename = tmp;
 
     while(1)
     {
@@ -96,10 +115,9 @@ static char *remove_user_internal(const char *user, int *found)
         free(old);
     }
 
-    close(out_fd);
     fclose(in_fd);
 
-    return tmp;
+    return out_fd;
 }
 
 bool auth_remove(const char *user2)
@@ -109,7 +127,8 @@ bool auth_remove(const char *user2)
     if(valid_login_name(user))
     {
         int found = 0;
-        char *tmp = remove_user_internal(user, &found);
+        char *tmp;
+        remove_user_internal(user, &found, &tmp);
         free(user);
         if(found)
         {
@@ -146,16 +165,15 @@ bool add_change_user(const char *user2, const char *pass2, int level)
     }
 
     /* remove any instances of the user in the file, write to temp file */
-    char *tmp = remove_user_internal(user, NULL);
-
-    printf("point 0\n");
+    char *tmp;
+    int out_fd = remove_user_internal(user, NULL, &tmp);
 
     /* add user to end of temp file */
-    int out_fd = open(tmp, O_WRONLY | O_APPEND);
     add_user_append(out_fd, user, pass, level);
-    printf("point 1\n");
     close(out_fd);
-    printf("point 2\n");
+    free(user);
+    memset(pass, 0, strlen(pass));
+    free(pass);
 
     /* rename temp file -> user list */
     rename(tmp, USERFILE);
@@ -217,8 +235,6 @@ void first_run_setup(void)
 
 struct authinfo_t auth_check(const char *name2, const char *pass2)
 {
-    sleep(1);
-
     /* get our own copy to remove newlines */
     char *name = strdup(name2);
     char *pass = strdup(pass2);
@@ -247,7 +263,6 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
         if(!strcmp(strtok(line, ":\r\n"), name))
         {
             free(name);
-            size_t pass_len = strlen(pass);
 
             char *salt = strdup(strtok(NULL, ":\r\n"));
             char *hash = strdup(strtok(NULL, ":\r\n"));
@@ -263,25 +278,11 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
             if(strlen(salt) != SALT_LEN)
                 error("salt corrupt");
 
-            char *buf = malloc(pass_len + SALT_LEN + 1);
-            memcpy(buf, salt, strlen(salt));
-            memcpy(buf + SALT_LEN, pass, pass_len);
-            buf[pass_len + SALT_LEN] = '\0';
+            char *hex = hash_pass_hex(pass, salt);
 
-            free(salt);
+            memset(pass, 0, strlen(pass));
             free(pass);
-
-            unsigned char *newhash = malloc(hash_len);
-
-            gcry_md_hash_buffer(ALGO, newhash, buf, pass_len + SALT_LEN);
-            free(buf);
-            char *hex = malloc(hash_len * 2 + 1);
-
-            char *ptr = hex;
-            for(unsigned int i = 0; i < hash_len; ++i, ptr += 2)
-                snprintf(ptr, 3, "%02x", newhash[i]);
-
-            free(newhash);
+            free(salt);
 
             if(!memcmp(hex, hash, hash_len * 2))
             {

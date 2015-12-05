@@ -37,6 +37,7 @@ int num_clients = 0;
 
 void sigchld_handler(int s)
 {
+    (void) s;
     printf("Client disconnect.\n");
     // waitpid() might overwrite errno, so we save and restore it:
     int saved_errno = errno;
@@ -67,6 +68,7 @@ void serv_cleanup(void)
 
 void sigint_handler(int sig)
 {
+    (void) sig;
     serv_cleanup();
 }
 

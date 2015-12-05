@@ -13,6 +13,11 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
     write(client_fd, buf, sizeof(buf));
 }
 
+void out_raw(const unsigned char *buf, size_t len)
+{
+    write(client_fd, buf, len);
+}
+
 #define BUFSZ 128
 
 char *client_read(void)
@@ -32,6 +37,8 @@ tryagain:
     printf("Read '%s'\n", buf);
     if(buf[0] & 0x80)
     {
+        telnet_handle_command((unsigned char*)buf);
+
         free(buf);
         goto tryagain;
     }
@@ -53,6 +60,8 @@ void all_upper(char *s)
 void client_main(int fd, struct sockaddr_in *addr, int total)
 {
     client_fd = fd;
+
+    telnet_init();
 
     char *ip = inet_ntoa(addr->sin_addr);
     printf("New client %s\n", ip);

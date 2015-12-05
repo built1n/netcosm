@@ -8,11 +8,15 @@
 
 /*
  * format:
- *  [login]:[hash]\n
+ *  { [username]:[salt]:[hash]:[authlevel]\n } [N]
 */
+
+static bool valid_login_name(const char *name);
 
 static void add_user_append(int fd, const char *name, const char *pass, int authlevel)
 {
+    if(errno < 0)
+        perror("unknown");
     size_t pass_len = strlen(pass);
 
     /* salt */
@@ -27,9 +31,7 @@ static void add_user_append(int fd, const char *name, const char *pass, int auth
     memcpy(salted + SALT_LEN, pass, pass_len);
     salted[pass_len + SALT_LEN] = '\0';
 
-    printf("hashing %s\n", salted);
-
-    int hash_len = gcry_md_get_algo_dlen(ALGO);
+    unsigned int hash_len = gcry_md_get_algo_dlen(ALGO);
     unsigned char *hash = malloc(hash_len);
     gcry_md_hash_buffer(ALGO, hash, salted, pass_len + SALT_LEN);
     free(salted);
@@ -37,83 +39,131 @@ static void add_user_append(int fd, const char *name, const char *pass, int auth
     /* convert to hex */
     char *hex = malloc(hash_len * 2 + 1);
     char *ptr = hex;
-    for(int i = 0; i < hash_len; ++i, ptr += 2)
+    for(unsigned int i = 0; i < hash_len; ++i, ptr += 2)
         snprintf(ptr, 3, "%02x", hash[i]);
 
     free(hash);
 
     /* write */
-
     flock(fd, LOCK_EX);
-
-    dprintf(fd, "%s:%s:%s:%d\n", name, salt, hex, authlevel);
-
-    free(hex);
-
+    if(dprintf(fd, "%s:%s:%s:%d\n", name, salt, hex, authlevel) < 0)
+        perror("dprintf");
+    printf("writing %s:%s:%s:%d\n", name, salt, hex, authlevel);
     flock(fd, LOCK_UN);
+
     close(fd);
+    free(hex);
+    perror("add_user_append");
 }
 
-void add_user(const char *name2, const char *pass2, int level)
+/* writes the contents of USERFILE to a temp file, and return its path, which is statically allocated */
+static char *remove_user_internal(const char *user, int *found)
 {
-    char *name = strdup(name2);
-    strtok(name, "\r\n");
-    char *pass = strdup(pass2);
-    strtok(pass, "\r\n");
+    FILE *in_fd = fopen(USERFILE, "a+");
+    static char tmp[] = "userlist_tmp.XXXXXX";
+    int out_fd = mkstemp(tmp);
+    if(found)
+        *found = 0;
 
-    /* remove any instances of the user in the file, write to temp file */
-
-    FILE *in_fd = fopen(USERFILE, "w+");
-    flock(fileno(in_fd), LOCK_SH);
-    char *tmp = tmpnam(NULL);
-    int out_fd = open(tmp, O_CREAT | O_WRONLY, 0600);
     while(1)
     {
         char *line = NULL;
-        size_t len = 0;
-        if(getline(&line, &len, in_fd) < 0)
+        char *junk;
+        size_t buflen = 0;
+        ssize_t len = getline(&line, &buflen, in_fd);
+
+
+        /* getline's return value is the actual length of the line read */
+        /* it's second argument in fact stores the length of the /buffer/, not the line */
+        if(len < 0)
+        {
+            free(line);
             break;
-        if(strcmp(strtok(line, ":\r\n"), name) != 0)
-            write(out_fd, line, len);
+        }
+
+        char *old = strdup(line);
+
+        char *user_on_line = strtok_r(line, ":\r\n", &junk);
+
+        if(strcmp(user_on_line, user) != 0)
+        {
+            write(out_fd, old, len);
+        }
+        else
+            if(found)
+                (*found)++;
+        free(line);
+        free(old);
     }
-    flock(fileno(in_fd), LOCK_UN);
+
+    close(out_fd);
     fclose(in_fd);
 
-    /* add user to end of temp file */
-
-    add_user_append(out_fd, name, pass, level);
-    close(out_fd);
-
-    /* rename temp file -> user list */
-    int fd = open(tmp, O_RDONLY);
-    int userfile = open(USERFILE, O_WRONLY | O_TRUNC | O_CREAT, 0600);
-
-    ssize_t nread;
-    char buf[1024];
-    while (nread = read(fd, buf, sizeof buf), nread > 0)
-    {
-        printf("writing %d bytes\n", nread);
-        char *out_ptr = buf;
-        ssize_t nwritten;
-
-        do {
-            nwritten = write(userfile, out_ptr, nread);
-
-            if (nwritten >= 0)
-            {
-                nread -= nwritten;
-                out_ptr += nwritten;
-            }
-            else
-                break;
-        } while (nread > 0);
-    }
-
-    close(userfile);
-    remove(tmp);
+    return tmp;
 }
 
-bool valid_login_name(const char *name)
+bool auth_remove(const char *user2)
+{
+    char *user = strdup(user2);
+    strtok(user, "\r\n");
+    if(valid_login_name(user))
+    {
+        int found = 0;
+        char *tmp = remove_user_internal(user, &found);
+        free(user);
+        if(found)
+        {
+            rename(tmp, USERFILE);
+            return true;
+        }
+        else
+        {
+            remove(tmp);
+            return false;
+        }
+    }
+    else
+    {
+        free(user);
+        return false;
+    }
+}
+
+bool add_change_user(const char *user2, const char *pass2, int level)
+{
+    char *user = strdup(user2);
+    strtok(user, "\r\n");
+    char *pass = strdup(pass2);
+    strtok(pass, "\r\n");
+
+    printf("Add user '%s'\n", user);
+
+    if(!valid_login_name(user))
+    {
+        free(user);
+        free(pass);
+        return false;
+    }
+
+    /* remove any instances of the user in the file, write to temp file */
+    char *tmp = remove_user_internal(user, NULL);
+
+    printf("point 0\n");
+
+    /* add user to end of temp file */
+    int out_fd = open(tmp, O_WRONLY | O_APPEND);
+    add_user_append(out_fd, user, pass, level);
+    printf("point 1\n");
+    close(out_fd);
+    printf("point 2\n");
+
+    /* rename temp file -> user list */
+    rename(tmp, USERFILE);
+
+    return true;
+}
+
+static bool valid_login_name(const char *name)
 {
     while(*name)
     {
@@ -154,7 +204,9 @@ void first_run_setup(void)
     len = 0;
     getline(&admin_pass, &len, stdin);
     strtok(admin_pass, "\r\n");
-    add_user(admin_name, admin_pass, 0);
+
+    if(!add_change_user(admin_name, admin_pass, PRIV_ADMIN))
+        error("Unknown error");
 
     /* zero the memory */
     memset(admin_name, 0, strlen(admin_name));
@@ -165,6 +217,8 @@ void first_run_setup(void)
 
 struct authinfo_t auth_check(const char *name2, const char *pass2)
 {
+    sleep(1);
+
     /* get our own copy to remove newlines */
     char *name = strdup(name2);
     char *pass = strdup(pass2);
@@ -179,7 +233,7 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
 
     struct authinfo_t ret;
     ret.success = false;
-    ret.authlevel = -1;
+    ret.authlevel = PRIV_NONE;
 
     while(1)
     {
@@ -202,7 +256,7 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
 
             free(line);
 
-            int hash_len = gcry_md_get_algo_dlen(ALGO);
+            unsigned int hash_len = gcry_md_get_algo_dlen(ALGO);
 
             if(strlen(hash) != hash_len * 2)
                 error("hash corrupt %d %d", strlen(hash), hash_len * 2);
@@ -224,7 +278,7 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
             char *hex = malloc(hash_len * 2 + 1);
 
             char *ptr = hex;
-            for(int i = 0; i < hash_len; ++i, ptr += 2)
+            for(unsigned int i = 0; i < hash_len; ++i, ptr += 2)
                 snprintf(ptr, 3, "%02x", newhash[i]);
 
             free(newhash);
@@ -249,7 +303,7 @@ good:
     printf("Successful authentication.\n");
     return ret;
 bad:
+    sleep(2);
     printf("Failed authentication.\n");
-    sleep(1);
     return ret;
 }

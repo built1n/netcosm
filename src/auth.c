@@ -258,6 +258,9 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
         if(getline(&line, &len, f) < 0)
         {
             free(line);
+            free(name);
+            memset(pass, 0, strlen(pass));
+            free(pass);
             goto bad;
         }
         if(!strcmp(strtok(line, ":\r\n"), name))
@@ -299,6 +302,8 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
                 goto bad;
             }
         }
+        else
+            free(line);
     }
 good:
     printf("Successful authentication.\n");

@@ -250,6 +250,7 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
     struct authinfo_t ret;
     ret.success = false;
     ret.authlevel = PRIV_NONE;
+    ret.user = NULL;
 
     while(1)
     {

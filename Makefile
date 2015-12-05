@@ -1,10 +1,10 @@
-CC = clang
+CC = gcc
 OUT = build
 PLATFORM = unix
 
 NETCOSM_OBJ = src/server.o src/client.o src/auth.o src/telnet.o
 
-CFLAGS = -O0 -g -I src/ -I target/$(PLATFORM) -Wall -Wextra
+CFLAGS = -O3 -g -I src/ -I target/$(PLATFORM) -Wall -Wextra
 LDFLAGS = -lgcrypt
 
 all: $(OUT)/$(PLATFORM).bin

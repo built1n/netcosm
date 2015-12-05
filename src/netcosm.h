@@ -31,7 +31,7 @@
 struct authinfo_t {
     bool success;
     const char *user;
-    int authlevel; /* 0 = highest */
+    int authlevel;
 };
 
 void client_main(int fd, struct sockaddr_in *addr, int);

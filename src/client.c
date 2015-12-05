@@ -162,6 +162,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
                         if(toupper(allow_admin[0]) == 'Y')
                             priv = PRIV_ADMIN;
 
+                        free(allow_admin);
+
                         if(add_change_user(user, pass, priv))
                             out("Success.\n");
                         else

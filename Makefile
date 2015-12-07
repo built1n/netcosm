@@ -2,7 +2,7 @@ CC = gcc
 OUT = build
 PLATFORM = unix
 
-NETCOSM_OBJ = src/server.o src/client.o src/auth.o src/telnet.o
+NETCOSM_OBJ = src/server.o src/client.o src/auth.o src/telnet.o src/util.o
 
 CFLAGS = -O3 -g -I src/ -I target/$(PLATFORM) -Wall -Wextra
 LDFLAGS = -lgcrypt

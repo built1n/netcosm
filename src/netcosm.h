@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
+#include <sys/ipc.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -34,7 +36,7 @@ struct authinfo_t {
     int authlevel;
 };
 
-void client_main(int fd, struct sockaddr_in *addr, int);
+void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);
 void __attribute__((noreturn)) error(const char *fmt, ...);
 void first_run_setup(void);
 struct authinfo_t auth_check(const char*, const char*);
@@ -48,3 +50,24 @@ void telnet_handle_command(const unsigned char*);
 void out(const char *fmt, ...) __attribute__((format(printf,1,2)));
 void out_raw(const unsigned char*, size_t);
 void telnet_init(void);
+void telnet_echo_on(void);
+void telnet_echo_off(void);
+#define MSG_MAX 512
+
+void remove_cruft(char*);
+
+/* child->master commands */
+#define REQ_INVALID     0
+#define REQ_BCASTMSG    1
+#define REQ_LISTCLIENTS 2
+#define REQ_CHANGESTATE 3
+#define REQ_CHANGEUSER  4
+
+#define STATE_INIT      0
+#define STATE_AUTH      1
+#define STATE_CHECKING  2
+#define STATE_LOGGEDIN  3
+#define STATE_ADMIN     4
+#define STATE_FAILED    5
+
+void auth_list_users(void);

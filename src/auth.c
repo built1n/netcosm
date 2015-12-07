@@ -123,7 +123,7 @@ static int remove_user_internal(const char *user, int *found, char **filename)
 bool auth_remove(const char *user2)
 {
     char *user = strdup(user2);
-    strtok(user, "\r\n");
+    remove_cruft(user);
     if(valid_login_name(user))
     {
         int found = 0;
@@ -151,9 +151,9 @@ bool auth_remove(const char *user2)
 bool add_change_user(const char *user2, const char *pass2, int level)
 {
     char *user = strdup(user2);
-    strtok(user, "\r\n");
+    remove_cruft(user);
     char *pass = strdup(pass2);
-    strtok(pass, "\r\n");
+    remove_cruft(pass);
 
     printf("Add user '%s'\n", user);
 
@@ -213,7 +213,7 @@ void first_run_setup(void)
         printf("Admin account name: ");
         fflush(stdout);
         getline(&admin_name, &len, stdin);
-        strtok(admin_name, "\r\n");
+        remove_cruft(admin_name);
     } while(!valid_login_name(admin_name));
 
     printf("Admin password (_DO_NOT_ USE A VALUABLE PASSWORD): ");
@@ -221,7 +221,7 @@ void first_run_setup(void)
     char *admin_pass = NULL;
     len = 0;
     getline(&admin_pass, &len, stdin);
-    strtok(admin_pass, "\r\n");
+    remove_cruft(admin_pass);
 
     if(!add_change_user(admin_name, admin_pass, PRIV_ADMIN))
         error("Unknown error");
@@ -238,8 +238,8 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
     /* get our own copy to remove newlines */
     char *name = strdup(name2);
     char *pass = strdup(pass2);
-    strtok(name, "\r\n");
-    strtok(pass, "\r\n");
+    remove_cruft(name);
+    remove_cruft(pass);
 
     /* find it in the user list */
 
@@ -255,6 +255,7 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
     while(1)
     {
         char *line = NULL;
+        char *save;
         size_t len = 0;
         if(getline(&line, &len, f) < 0)
         {
@@ -264,14 +265,14 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
             free(pass);
             goto bad;
         }
-        if(!strcmp(strtok(line, ":\r\n"), name))
+        if(!strcmp(strtok_r(line, ":\r\n", &save), name))
         {
             free(name);
 
-            char *salt = strdup(strtok(NULL, ":\r\n"));
-            char *hash = strdup(strtok(NULL, ":\r\n"));
+            char *salt = strdup(strtok_r(NULL, ":\r\n", &save));
+            char *hash = strdup(strtok_r(NULL, ":\r\n", &save));
 
-            ret.authlevel = strtol(strtok(NULL, ":\r\n"), NULL, 10);
+            ret.authlevel = strtol(strtok_r(NULL, ":\r\n", &save), NULL, 10);
 
             free(line);
 
@@ -313,4 +314,30 @@ bad:
     sleep(2);
     printf("Failed authentication.\n");
     return ret;
+}
+
+void auth_list_users(void)
+{
+    FILE *f = fopen(USERFILE, "r");
+
+    flock(fileno(f), LOCK_SH);
+
+    while(1)
+    {
+        char *line = NULL;
+        char *save;
+        size_t len = 0;
+        if(getline(&line, &len, f) < 0)
+        {
+            free(line);
+            return;
+        }
+        char *user = strdup(strtok_r(line, ":\r\n", &save));
+        strtok_r(NULL, ":\r\n", &save);
+        strtok_r(NULL, ":\r\n", &save);
+        int priv = strtol(strtok_r(NULL, ":\r\n", &save), NULL, 0);
+        out("User %s priv %d\n", user, priv);
+        free(user);
+        free(line);
+    }
 }

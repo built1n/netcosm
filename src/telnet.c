@@ -47,6 +47,24 @@ void telnet_handle_command(const unsigned char *buf)
         printf("\n");
 }
 
+void telnet_echo_off(void)
+{
+    const unsigned char seq[] = {
+        IAC, DONT, ECHO,
+        IAC, WILL, ECHO,
+    };
+    out_raw(seq, ARRAYLEN(seq));
+}
+
+void telnet_echo_on(void)
+{
+    const unsigned char seq[] = {
+        IAC, DO, ECHO,
+        IAC, WONT, ECHO,
+    };
+    out_raw(seq, ARRAYLEN(seq));
+}
+
 void telnet_init(void)
 {
     const unsigned char init_seq[] = {
@@ -56,6 +74,8 @@ void telnet_init(void)
         IAC, DONT, NAWS,
         IAC, WONT, STATUS,
         IAC, DONT, STATUS,
+        IAC, DO, ECHO,
+        IAC, WONT, ECHO,
     };
     out_raw(init_seq, ARRAYLEN(init_seq));
 }

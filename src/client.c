@@ -1,6 +1,11 @@
 #include "netcosm.h"
 
-int client_fd;
+int client_fd, to_parent, from_parent;
+
+void out_raw(const unsigned char *buf, size_t len)
+{
+    write(client_fd, buf, len);
+}
 
 void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
 {
@@ -8,22 +13,20 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
     memset(buf, 0, sizeof(buf));
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
+    int len = vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    write(client_fd, buf, sizeof(buf));
+    out_raw((unsigned char*)buf, len);
 }
 
-void out_raw(const unsigned char *buf, size_t len)
-{
-    write(client_fd, buf, len);
-}
 
 #define BUFSZ 128
 
 char *client_read(void)
 {
     char *buf;
+
 tryagain:
+
     buf = malloc(BUFSZ);
     memset(buf, 0, BUFSZ);
     if(read(client_fd, buf, BUFSZ - 1) < 0)
@@ -55,11 +58,40 @@ void all_upper(char *s)
     }
 }
 
+void sigusr2_handler(int s)
+{
+    (void) s;
+    unsigned char buf[MSG_MAX + 1];
+    size_t len = read(from_parent, buf, MSG_MAX);
+    buf[MSG_MAX] = '\0';
+    out_raw(buf, len);
+}
+
+void client_change_state(int state)
+{
+    unsigned char cmdcode = REQ_CHANGESTATE;
+    write(to_parent, &cmdcode, sizeof(cmdcode));
+    write(to_parent, &state, sizeof(state));
+    kill(getppid(), SIGUSR1);
+}
+
+void client_change_user(const char *user)
+{
+    unsigned char cmdcode = REQ_CHANGEUSER;
+    write(to_parent, &cmdcode, sizeof(cmdcode));
+    write(to_parent, user, strlen(user) + 1);
+    kill(getppid(), SIGUSR1);
+}
+
 #define WSPACE " \t\r\n"
 
-void client_main(int fd, struct sockaddr_in *addr, int total)
+void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
 {
     client_fd = fd;
+    to_parent = to;
+    from_parent = from;
+
+    signal(SIGUSR2, sigusr2_handler);
 
     telnet_init();
 
@@ -81,13 +113,20 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
 
     char *current_user;
 
+    client_change_state(STATE_AUTH);
+
     /* auth loop */
     while(1)
     {
         out("login: ");
         current_user = client_read();
+        remove_cruft(current_user);
+        telnet_echo_off();
         out("Password: ");
         char *pass = client_read();
+        telnet_echo_on();
+        out("\n");
+        client_change_state(STATE_CHECKING);
         struct authinfo_t auth = auth_check(current_user, pass);
         memset(pass, 0, strlen(pass));
         free(pass);
@@ -95,11 +134,13 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
         authlevel = auth.authlevel;
         if(auth.success)
         {
+            client_change_state(STATE_LOGGEDIN);
             out("Access Granted.\n\n");
             break;
         }
         else
         {
+            client_change_state(STATE_FAILED);
             free(current_user);
             out("Access Denied.\n\n");
             if(++failures >= MAX_FAILURES)
@@ -112,8 +153,12 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
         return;
 
     bool admin = (authlevel == PRIV_ADMIN);
+    if(admin)
+        client_change_state(STATE_ADMIN);
 
     /* authenticated */
+    printf("Authenticated as %s\n", current_user);
+    client_change_user(current_user);
     while(1)
     {
         out(">> ");
@@ -123,6 +168,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
 
         char *tok = strtok_r(cmd, WSPACE, &save);
 
+        if(!tok)
+            continue;
         all_upper(tok);
 
         if(admin)
@@ -183,13 +230,32 @@ void client_main(int fd, struct sockaddr_in *addr, int total)
                     else
                         out("Usage: USER ADD|CHANGE <USERNAME>\n");
                 }
+                else if(!strcmp(what, "LIST"))
+                {
+                    auth_list_users();
+                }
+            }
+            else if(!strcmp(tok, "CLIENTS"))
+            {
+                unsigned char cmd_code = REQ_LISTCLIENTS;
+                write(to_parent, &cmd_code, sizeof(cmd_code));
+                kill(getppid(), SIGUSR1);
+                waitpid(-1, NULL, 0);
             }
         }
 
-        if(!strcmp(tok, "QUIT"))
+        if(!strcmp(tok, "QUIT") || !strcmp(tok, "EXIT"))
         {
             free(cmd);
             goto done;
+        }
+        else if(!strcmp(tok, "SAY"))
+        {
+            char *what = strtok_r(NULL, "", &save);
+            unsigned char cmd_code = REQ_BCASTMSG;
+            write(to_parent, &cmd_code, sizeof(cmd_code));
+            dprintf(to_parent, "%s says %s", current_user, what);
+            kill(getppid(), SIGUSR1);
         }
 
     next_cmd:

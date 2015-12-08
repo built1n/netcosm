@@ -141,7 +141,7 @@ void req_send_clientinfo(unsigned char *data, size_t datalen,
         "LOGGED IN AS ADMIN",
         "ACCESS DENIED",
     };
-    if(sender->user)
+    if(child->user)
         len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s] USER %s\n",
                  inet_ntoa(child->addr), child->pid, state[child->state], child->user);
     else
@@ -189,7 +189,7 @@ static const struct child_request {
 
     void (*finalize)(struct child_data *sender);
 } requests[] = {
-    { REQ_BCASTMSG,    true,  CHILD_ALL_BUT_SENDER, req_pass_msg,        NULL },
+    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL },
     { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_signal_sender },
     { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL },
     { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL },
@@ -292,6 +292,29 @@ finish:
         req->finalize(sender);
 }
 
+void init_signals(void)
+{
+    struct sigaction sa;
+
+    sa.sa_sigaction = sigchld_handler; // reap all dead processes
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_SIGINFO;
+    if (sigaction(SIGCHLD, &sa, NULL) < 0)
+        error("sigaction");
+
+    sa.sa_handler = sigint_handler;
+    sa.sa_flags = SA_RESTART;
+    if(sigaction(SIGINT, &sa, NULL) < 0)
+        error("sigaction");
+    if(sigaction(SIGTERM, &sa, NULL) < 0)
+        error("sigaction");
+
+    sa.sa_sigaction = sigusr1_handler;
+    sa.sa_flags = SA_RESTART | SA_SIGINFO;
+    if(sigaction(SIGUSR1, &sa, NULL) < 0)
+        error("sigaction");
+}
+
 int main(int argc, char *argv[])
 {
     if(argc != 2)
@@ -325,25 +348,7 @@ int main(int argc, char *argv[])
 
     /* set up signal handlers for SIGCHLD, SIGUSR1, and SIGINT */
     /* SIGUSR1 is used for broadcast signalling */
-    struct sigaction sa;
-
-    sa.sa_sigaction = sigchld_handler; // reap all dead processes
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART | SA_SIGINFO;
-    if (sigaction(SIGCHLD, &sa, NULL) < 0)
-        error("sigaction");
-
-    sa.sa_handler = sigint_handler;
-    sa.sa_flags = SA_RESTART;
-    if(sigaction(SIGINT, &sa, NULL) < 0)
-        error("sigaction");
-    if(sigaction(SIGTERM, &sa, NULL) < 0)
-        error("sigaction");
-
-    sa.sa_sigaction = sigusr1_handler;
-    sa.sa_flags = SA_RESTART | SA_SIGINFO;
-    if(sigaction(SIGUSR1, &sa, NULL) < 0)
-        error("sigaction");
+    init_signals();
 
     if(access(USERFILE, F_OK) < 0)
         first_run_setup();

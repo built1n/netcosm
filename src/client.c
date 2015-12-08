@@ -58,6 +58,8 @@ void all_upper(char *s)
     }
 }
 
+volatile sig_atomic_t done_printing;
+
 void sigusr2_handler(int s)
 {
     (void) s;
@@ -65,6 +67,7 @@ void sigusr2_handler(int s)
     size_t len = read(from_parent, buf, MSG_MAX);
     buf[MSG_MAX] = '\0';
     out_raw(buf, len);
+    done_printing = 1;
 }
 
 void client_change_state(int state)
@@ -235,12 +238,19 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
                     auth_list_users();
                 }
             }
-            else if(!strcmp(tok, "CLIENTS"))
+            else if(!strcmp(tok, "CLIENT"))
             {
-                unsigned char cmd_code = REQ_LISTCLIENTS;
-                write(to_parent, &cmd_code, sizeof(cmd_code));
-                kill(getppid(), SIGUSR1);
-                waitpid(-1, NULL, 0);
+                char *what = strtok_r(NULL, WSPACE, &save);
+                all_upper(what);
+                if(!strcmp(what, "LIST"))
+                {
+                    done_printing = 0;
+                    unsigned char cmd_code = REQ_LISTCLIENTS;
+                    write(to_parent, &cmd_code, sizeof(cmd_code));
+                    kill(getppid(), SIGUSR1);
+                    waitpid(-1, NULL, 0);
+                    while(!done_printing);
+                }
             }
         }
 

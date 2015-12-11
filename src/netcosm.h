@@ -56,12 +56,15 @@ void telnet_echo_off(void);
 
 void remove_cruft(char*);
 
-/* child->master commands */
-#define REQ_INVALID     0
+/* child<->master commands */
+/* children might not implement all of these */
+#define REQ_NOP         0
 #define REQ_BCASTMSG    1
 #define REQ_LISTCLIENTS 2
 #define REQ_CHANGESTATE 3
 #define REQ_CHANGEUSER  4
+#define REQ_HANG        5
+#define REQ_KICK        6
 
 #define STATE_INIT      0
 #define STATE_AUTH      1

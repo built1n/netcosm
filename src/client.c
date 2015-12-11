@@ -1,10 +1,24 @@
 #include "netcosm.h"
 
-int client_fd, to_parent, from_parent;
+static int client_fd, to_parent, from_parent;
+
+static volatile sig_atomic_t output_locked = 0, done_printing;
 
 void out_raw(const unsigned char *buf, size_t len)
 {
-    write(client_fd, buf, len);
+try_again:
+    while(output_locked);
+
+    /* something weird happened and the value changed between the loop and here */
+    if(!output_locked)
+    {
+        output_locked = 1;
+        write(client_fd, buf, len);
+        output_locked = 0;
+        done_printing = 1;
+    }
+    else
+        goto try_again;
 }
 
 void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
@@ -18,6 +32,11 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
     out_raw((unsigned char*)buf, len);
 }
 
+void send_master(unsigned char cmd)
+{
+    write(to_parent, &cmd, 1);
+    kill(getppid(), SIGUSR1);
+}
 
 #define BUFSZ 128
 
@@ -58,16 +77,35 @@ void all_upper(char *s)
     }
 }
 
-volatile sig_atomic_t done_printing;
-
 void sigusr2_handler(int s)
 {
     (void) s;
+    printf("got SIGUSR2\n");
+    unsigned char cmd;
+    read(from_parent, &cmd, 1);
     unsigned char buf[MSG_MAX + 1];
-    size_t len = read(from_parent, buf, MSG_MAX);
-    buf[MSG_MAX] = '\0';
-    out_raw(buf, len);
-    done_printing = 1;
+    switch(cmd)
+    {
+    case REQ_BCASTMSG:
+    {
+        printf("reading...\n");
+        size_t len = read(from_parent, buf, MSG_MAX);
+        printf("done reading\n");
+        buf[MSG_MAX] = '\0';
+        out_raw(buf, len);
+        break;
+    }
+    case REQ_KICK:
+    {
+        size_t len = read(from_parent, buf, MSG_MAX);
+        buf[MSG_MAX] = '\0';
+        out_raw(buf, len);
+        exit(EXIT_SUCCESS);
+    }
+    default:
+        fprintf(stderr, "WARNING: client process received unknown request\n");
+        break;
+    }
 }
 
 void client_change_state(int state)
@@ -93,6 +131,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
     client_fd = fd;
     to_parent = to;
     from_parent = from;
+
+    output_locked = 0;
 
     signal(SIGUSR2, sigusr2_handler);
 
@@ -197,7 +237,7 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
                         out("Usage: USER DEL <USERNAME>\n");
                     }
                 }
-                else if(!strcmp(what, "ADD") || !strcmp(what, "PASS"))
+                else if(!strcmp(what, "ADD") || !strcmp(what, "MODIFY"))
                 {
                     char *user = strtok_r(NULL, WSPACE, &save);
                     if(user)
@@ -231,7 +271,7 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
                         free(pass);
                     }
                     else
-                        out("Usage: USER ADD|CHANGE <USERNAME>\n");
+                        out("Usage: USER <ADD|MODIFY> <USERNAME>\n");
                 }
                 else if(!strcmp(what, "LIST"))
                 {
@@ -242,6 +282,10 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
             {
                 char *what = strtok_r(NULL, WSPACE, &save);
                 all_upper(what);
+                if(!what)
+                {
+                    out("Usage: CLIENT <LIST|KICK> <PID>\n");
+                }
                 if(!strcmp(what, "LIST"))
                 {
                     done_printing = 0;
@@ -251,7 +295,28 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
                     waitpid(-1, NULL, 0);
                     while(!done_printing);
                 }
+                else if(!strcmp(what, "KICK"))
+                {
+                    char *pid_s = strtok_r(NULL, WSPACE, &save);
+                    if(pid_s)
+                    {
+                        unsigned char cmd_code = REQ_KICK;
+                        write(to_parent, &cmd_code, sizeof(cmd_code));
+                        pid_t pid = strtol(pid_s, NULL, 0);
+                        write(to_parent, &pid, sizeof(pid));
+                        char buf[128];
+                        int len = snprintf(buf, sizeof(buf), "You were kicked.\n");
+                        write(to_parent, buf, len);
+                        kill(getppid(), SIGUSR1);
+                    }
+                    else
+                        out("Usage: CLIENT KICK <PID>\n");
+                }
             }
+            //else if(!strcmp(tok, "HANG"))
+            //{
+            //    send_master(REQ_HANG);
+            //}
         }
 
         if(!strcmp(tok, "QUIT") || !strcmp(tok, "EXIT"))

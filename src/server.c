@@ -141,6 +141,7 @@ void req_send_clientinfo(unsigned char *data, size_t datalen,
         "LOGGED IN AS ADMIN",
         "ACCESS DENIED",
     };
+
     if(child->user)
         len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s] USER %s\n",
                  inet_ntoa(child->addr), child->pid, state[child->state], child->user);
@@ -168,11 +169,33 @@ void req_change_state(unsigned char *data, size_t datalen,
 }
 
 void req_change_user(unsigned char *data, size_t datalen,
-                      struct child_data *sender, struct child_data *child)
+                     struct child_data *sender, struct child_data *child)
 {
     if(sender->user)
         free(sender->user);
     sender->user = strdup((char*)data);
+}
+
+//void req_hang(unsigned char *data, size_t datalen,
+//              struct child_data *sender, struct child_data *child)
+//{
+//    while(1);
+//}
+
+void req_kick_client(unsigned char *data, size_t datalen,
+                     struct child_data *sender, struct child_data *child)
+{
+    if(datalen >= sizeof(pid_t))
+    {
+        pid_t kicked_pid = *((pid_t*)data);
+        if(kicked_pid == child->pid)
+        {
+            unsigned char cmd = REQ_KICK;
+            write(child->outpipe[1], &cmd, 1);
+            write(child->outpipe[1], data + sizeof(pid_t), datalen - sizeof(pid_t));
+            kill(child->pid, SIGUSR2);
+        }
+    }
 }
 
 static const struct child_request {
@@ -180,21 +203,26 @@ static const struct child_request {
 
     bool havedata;
 
-    enum { CHILD_SENDER, CHILD_ALL_BUT_SENDER, CHILD_ALL } which;
+    enum { CHILD_NONE, CHILD_SENDER, CHILD_ALL_BUT_SENDER, CHILD_ALL } which;
 
     /* sender_pipe is the pipe to the sender of the request */
-    /* data is bogus if havedata = false */
+    /* data points to bogus if havedata = false */
     void (*handle_child)(unsigned char *data, size_t len,
                          struct child_data *sender, struct child_data *child);
 
     void (*finalize)(struct child_data *sender);
-} requests[] = {
-    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL },
-    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_signal_sender },
-    { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL },
-    { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL },
-};
 
+    /* what byte to write back to the sender if != REQ_NOP */
+    unsigned char cmd_to_send;
+} requests[] = {
+    { REQ_NOP,         false, CHILD_NONE,           NULL,                NULL,              REQ_NOP},
+    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL,              REQ_BCASTMSG},
+    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_signal_sender, REQ_BCASTMSG},
+    { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              REQ_NOP },
+    { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              REQ_NOP },
+    //{ REQ_HANG,        false, CHILD_SENDER,         req_hang,            NULL,              REQ_NOP },
+    { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP },
+};
 
 /* SIGUSR1 is used by children to communicate with the master process */
 /* the master handles commands that involve multiple children, i.e. message passing, listing clients, etc. */
@@ -203,7 +231,7 @@ void sigusr1_handler(int s, siginfo_t *info, void *vp)
     (void) s;
     (void) vp;
     pid_t sender_pid = info->si_pid;
-    printf("PID %d requests a broadcast message\n", sender_pid);
+    printf("PID %d sends a client request\n", sender_pid);
 
     unsigned char cmd, data[MSG_MAX + 1];
     const struct child_request *req = NULL;
@@ -211,7 +239,7 @@ void sigusr1_handler(int s, siginfo_t *info, void *vp)
     struct child_data *sender = NULL;
 
     /* we have to iterate over the linked list twice */
-    /* first to get the data, second to send it to all the children */
+    /* first to get the data, second to send it to the rest of the children */
 
     struct child_data *iter = child_data;
 
@@ -243,6 +271,9 @@ void sigusr1_handler(int s, siginfo_t *info, void *vp)
                     datalen = read(iter->readpipe[0], data, sizeof(data));
                 }
 
+                if(req->cmd_to_send)
+                    write(sender->outpipe[1], &req->cmd_to_send, 1);
+
                 switch(req->which)
                 {
                 case CHILD_SENDER:
@@ -251,6 +282,8 @@ void sigusr1_handler(int s, siginfo_t *info, void *vp)
                     if(req->which == CHILD_SENDER)
                         goto finish;
                     break;
+                case CHILD_NONE:
+                    goto finish;
                 default:
                     break;
                 }
@@ -290,14 +323,17 @@ finish:
 
     if(req->finalize)
         req->finalize(sender);
+
+    printf("finished handling client request\n");
 }
 
 void init_signals(void)
 {
     struct sigaction sa;
 
-    sa.sa_sigaction = sigchld_handler; // reap all dead processes
     sigemptyset(&sa.sa_mask);
+
+    sa.sa_sigaction = sigchld_handler; // reap all dead processes
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     if (sigaction(SIGCHLD, &sa, NULL) < 0)
         error("sigaction");
@@ -309,6 +345,7 @@ void init_signals(void)
     if(sigaction(SIGTERM, &sa, NULL) < 0)
         error("sigaction");
 
+    sigaddset(&sa.sa_mask, SIGUSR1);
     sa.sa_sigaction = sigusr1_handler;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     if(sigaction(SIGUSR1, &sa, NULL) < 0)

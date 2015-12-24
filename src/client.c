@@ -53,10 +53,9 @@ static void signal_master(void)
     sigprocmask(SIG_SETMASK, &old, NULL);
 
     errno = 0;
-    printf("Spinning until completed flag set.\n");
+
     /* spin until we're done handling the request */
     while(!request_complete) usleep(1);
-    printf("Request completely done.\n");
 }
 
 void send_master(unsigned char cmd, const void *data, size_t sz)
@@ -144,6 +143,13 @@ void sigusr2_handler(int s, siginfo_t *info, void *vp)
         out_raw(buf, len);
         exit(EXIT_SUCCESS);
     }
+    case REQ_MOVE:
+    {
+        int status;
+        read(from_parent, &status, sizeof(status));
+        if(!status)
+            out("Cannot go that way.\n");
+    }
     case REQ_NOP:
         break;
     default:
@@ -170,7 +176,35 @@ static void client_change_user(const char *user)
 
 static void client_change_room(room_id id)
 {
-    send_master(REQ_CHANGEROOM, &id, sizeof(id));
+    send_master(REQ_SETROOM, &id, sizeof(id));
+}
+
+static void client_move(const char *dir)
+{
+    struct {
+        const char *text;
+        enum direction_t val;
+    } dirs[] = {
+        { "N", DIR_N },
+        { "NE", DIR_NE },
+        { "E",  DIR_E  },
+        { "SE", DIR_SE },
+        { "S",  DIR_S  },
+        { "SW", DIR_SW },
+        { "W",  DIR_W  },
+        { "NW", DIR_NW },
+        { "UP", DIR_UP },
+        { "DOWN", DIR_DOWN }
+    };
+    for(unsigned i = 0; i < ARRAYLEN(dirs); ++i)
+    {
+        if(!strcmp(dir, dirs[i].text))
+        {
+            send_master(REQ_MOVE, &dirs[i].val, sizeof(dirs[i].val));
+            return;
+        }
+    }
+    out("Unknown direction.\n");
 }
 
 #define WSPACE " \t\r\n"
@@ -422,6 +456,12 @@ auth:
         else if(!strcmp(tok, "WAIT"))
         {
             send_master(REQ_WAIT, NULL, 0);
+        }
+        else if(!strcmp(tok, "GO"))
+        {
+            char *dir = strtok_r(NULL, WSPACE, &save);
+            all_upper(dir);
+            client_move(dir);
         }
 
     next_cmd:

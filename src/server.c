@@ -36,12 +36,13 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
 /* assume int is atomic */
 volatile int num_clients = 0;
 
-struct child_data {
+static struct child_data {
     pid_t pid;
     int readpipe[2];
     int outpipe[2];
 
     int state;
+    room_id room;
     char *user;
 
     struct in_addr addr;
@@ -50,7 +51,7 @@ struct child_data {
     struct child_data *next;
 } *child_data;
 
-void sigchld_handler(int s, siginfo_t *info, void *vp)
+static void sigchld_handler(int s, siginfo_t *info, void *vp)
 {
     (void) s;
     (void) info;
@@ -86,15 +87,15 @@ void sigchld_handler(int s, siginfo_t *info, void *vp)
 
 int port;
 
-void handle_client(int fd, struct sockaddr_in *addr,
-                   int num_clients, int to, int from)
+static void handle_client(int fd, struct sockaddr_in *addr,
+                   int nclients, int to, int from)
 {
-    client_main(fd, addr, num_clients, to, from);
+    client_main(fd, addr, nclients, to, from);
 }
 
 int server_socket;
 
-void serv_cleanup(void)
+static void serv_cleanup(void)
 {
     write(STDOUT_FILENO, "Shutdown server.\n", strlen("Shutdown server.\n"));
     if(shutdown(server_socket, SHUT_RDWR) > 0)
@@ -102,31 +103,28 @@ void serv_cleanup(void)
     close(server_socket);
 }
 
-void sigint_handler(int s)
+static void sigint_handler(int s)
 {
     (void) s;
     serv_cleanup();
 }
 
-void write_client(int child_pipe, struct child_data *iter)
-{
-    char buf[128];
-    printf("writing ip\n");
-    char *ip = inet_ntoa(iter->addr);
-    int len = snprintf(buf, sizeof(buf), "Client %s PID %d\n", ip, iter->pid);
-    write(child_pipe, buf, len);
-}
-
-void req_pass_msg(unsigned char *data, size_t datalen,
+static void req_pass_msg(unsigned char *data, size_t datalen,
                   struct child_data *sender, struct child_data *child)
 {
     (void) sender;
+
+    if(sender->pid != child->pid)
+    {
+        unsigned char cmd = REQ_BCASTMSG;
+        write(child->outpipe[1], &cmd, 1);
+    }
 
     write(child->outpipe[1], data, datalen);
     kill(child->pid, SIGUSR2);
 }
 
-void req_send_clientinfo(unsigned char *data, size_t datalen,
+static void req_send_clientinfo(unsigned char *data, size_t datalen,
                          struct child_data *sender, struct child_data *child)
 {
     (void) data;
@@ -148,29 +146,33 @@ void req_send_clientinfo(unsigned char *data, size_t datalen,
     else
         len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s]\n",
                  inet_ntoa(child->addr), child->pid, state[child->state]);
+
     write(sender->outpipe[1], buf, len);
 }
 
-void req_signal_sender(struct child_data *sender)
-{
-    kill(sender->pid, SIGUSR2);
-}
-
-void req_change_state(unsigned char *data, size_t datalen,
+static void req_change_state(unsigned char *data, size_t datalen,
                       struct child_data *sender, struct child_data *child)
 {
     (void) child;
     if(datalen == sizeof(sender->state))
     {
         sender->state = *((int*)data);
+        printf("State changed to %d\n", sender->state);
     }
     else
-        printf("State data is of the wrong size.\n");
+    {
+        printf("State data is of the wrong size\n");
+        for(size_t i = 0; i < datalen; ++i)
+            printf("%02x\n", data[i]);
+    }
 }
 
-void req_change_user(unsigned char *data, size_t datalen,
+static void req_change_user(unsigned char *data, size_t datalen,
                      struct child_data *sender, struct child_data *child)
 {
+    (void) data;
+    (void) datalen;
+    (void) child;
     if(sender->user)
         free(sender->user);
     sender->user = strdup((char*)data);
@@ -182,9 +184,10 @@ void req_change_user(unsigned char *data, size_t datalen,
 //    while(1);
 //}
 
-void req_kick_client(unsigned char *data, size_t datalen,
+static void req_kick_client(unsigned char *data, size_t datalen,
                      struct child_data *sender, struct child_data *child)
 {
+    (void) sender;
     if(datalen >= sizeof(pid_t))
     {
         pid_t kicked_pid = *((pid_t*)data);
@@ -196,6 +199,11 @@ void req_kick_client(unsigned char *data, size_t datalen,
             kill(child->pid, SIGUSR2);
         }
     }
+}
+
+static void req_wait(struct child_data *sender)
+{
+    sleep(10);
 }
 
 static const struct child_request {
@@ -212,26 +220,40 @@ static const struct child_request {
 
     void (*finalize)(struct child_data *sender);
 
-    /* what byte to write back to the sender if != REQ_NOP */
+    /* byte to write back to the sender */
     unsigned char cmd_to_send;
 } requests[] = {
-    { REQ_NOP,         false, CHILD_NONE,           NULL,                NULL,              REQ_NOP},
-    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL,              REQ_BCASTMSG},
-    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_signal_sender, REQ_BCASTMSG},
-    { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              REQ_NOP },
-    { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              REQ_NOP },
+    { REQ_NOP,         false, CHILD_NONE,           NULL,                NULL,              REQ_NOP      },
+    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL,              REQ_BCASTMSG },
+    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, NULL,              REQ_BCASTMSG },
+    { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              REQ_NOP      },
+    { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              REQ_NOP      },
     //{ REQ_HANG,        false, CHILD_SENDER,         req_hang,            NULL,              REQ_NOP },
-    { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP },
+    { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP      },
+    { REQ_WAIT,        false, CHILD_NONE,           NULL,                req_wait,          REQ_NOP      },
 };
+
+void sig_printf(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+
+    char buf[128];
+    int len = vsnprintf(buf, sizeof(buf), fmt, ap);
+
+    write(STDOUT_FILENO, buf, len);
+
+    va_end(ap);
+}
 
 /* SIGUSR1 is used by children to communicate with the master process */
 /* the master handles commands that involve multiple children, i.e. message passing, listing clients, etc. */
-void sigusr1_handler(int s, siginfo_t *info, void *vp)
+static void sigusr1_handler(int s, siginfo_t *info, void *vp)
 {
     (void) s;
     (void) vp;
     pid_t sender_pid = info->si_pid;
-    printf("PID %d sends a client request\n", sender_pid);
+    sig_printf("PID %d sends a client request\n", sender_pid);
 
     unsigned char cmd, data[MSG_MAX + 1];
     const struct child_request *req = NULL;
@@ -261,18 +283,17 @@ void sigusr1_handler(int s, siginfo_t *info, void *vp)
                 }
                 if(!req)
                 {
-                    printf("Unknown request.\n");
+                    sig_printf("Unknown request.\n");
                     return;
                 }
 
-                printf("Got command %d\n", cmd);
+                sig_printf("Got command %d\n", cmd);
                 if(req->havedata)
                 {
                     datalen = read(iter->readpipe[0], data, sizeof(data));
                 }
 
-                if(req->cmd_to_send)
-                    write(sender->outpipe[1], &req->cmd_to_send, 1);
+                write(sender->outpipe[1], &req->cmd_to_send, 1);
 
                 switch(req->which)
                 {
@@ -321,10 +342,18 @@ void sigusr1_handler(int s, siginfo_t *info, void *vp)
 
 finish:
 
-    if(req->finalize)
+    if(req && req->finalize)
         req->finalize(sender);
 
-    printf("finished handling client request\n");
+    if(sender)
+        kill(sender->pid, SIGUSR2);
+    else
+        sig_printf("WARN: unknown child sent request.\n");
+
+    if(!req)
+        sig_printf("WARN: unknown request, request ignored\n");
+
+    sig_printf("finished handling client request\n");
 }
 
 void init_signals(void)
@@ -352,13 +381,17 @@ void init_signals(void)
         error("sigaction");
 }
 
-int main(int argc, char *argv[])
+static void check_userfile(void)
 {
-    if(argc != 2)
-        port = PORT;
-    else
-        port = strtol(argv[1], NULL, 0);
-    srand(time(0));
+    if(access(USERFILE, F_OK) < 0)
+        first_run_setup();
+
+    if(access(USERFILE, R_OK | W_OK) < 0)
+        error("cannot access "USERFILE);
+}
+
+static int server_bind(void)
+{
     int sock = socket(AF_INET, SOCK_STREAM, 0);
 
     if(sock<0)
@@ -381,17 +414,27 @@ int main(int argc, char *argv[])
     if(listen(sock, BACKLOG) < 0)
         error("listen");
 
-    server_socket = sock;
+    return sock;
+}
+
+int main(int argc, char *argv[])
+{
+    if(argc != 2)
+        port = PORT;
+    else
+        port = strtol(argv[1], NULL, 0);
+
+    srand(time(0));
+
+    server_socket = server_bind();
 
     /* set up signal handlers for SIGCHLD, SIGUSR1, and SIGINT */
-    /* SIGUSR1 is used for broadcast signalling */
+    /* SIGUSR1 is used for broadcast signaling */
     init_signals();
 
-    if(access(USERFILE, F_OK) < 0)
-        first_run_setup();
+    check_userfile();
 
-    if(access(USERFILE, R_OK | W_OK) < 0)
-        error("cannot access "USERFILE);
+    world_init(netcosm_world, netcosm_world_sz);
 
     child_data = NULL;
 
@@ -401,7 +444,7 @@ int main(int argc, char *argv[])
     {
         struct sockaddr_in client;
         socklen_t client_len = sizeof(client);
-        int new_sock = accept(sock, (struct sockaddr*) &client, &client_len);
+        int new_sock = accept(server_socket, (struct sockaddr*) &client, &client_len);
         if(new_sock < 0)
             error("accept");
 
@@ -421,9 +464,10 @@ int main(int argc, char *argv[])
 
         if(!pid)
         {
+            /* child */
             close(readpipe[0]);
             close(outpipe[1]);
-            close(sock);
+            close(server_socket);
 
             printf("Child with PID %d spawned\n", getpid());
 

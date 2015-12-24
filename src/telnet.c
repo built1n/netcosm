@@ -37,7 +37,14 @@ void telnet_handle_command(const unsigned char *buf)
                 goto found;
             }
         }
-        printf("??? ");
+        switch(c)
+        {
+        case IP:
+            exit(0);
+        default:
+            break;
+        }
+        printf("???: %d ", c);
     found:
 
         ++buf;
@@ -74,8 +81,9 @@ void telnet_init(void)
         IAC, DONT, NAWS,
         IAC, WONT, STATUS,
         IAC, DONT, STATUS,
-        IAC, DO, ECHO,
+        IAC, DO,   ECHO,
         IAC, WONT, ECHO,
+        IAC, DONT, LINEMODE,
     };
     out_raw(init_seq, ARRAYLEN(init_seq));
 }

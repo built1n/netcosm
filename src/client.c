@@ -2,7 +2,9 @@
 
 static int client_fd, to_parent, from_parent;
 
-static volatile sig_atomic_t output_locked = 0, done_printing;
+static room_id client_room;
+
+static volatile sig_atomic_t output_locked = 0;
 
 void out_raw(const unsigned char *buf, size_t len)
 {
@@ -15,7 +17,6 @@ try_again:
         output_locked = 1;
         write(client_fd, buf, len);
         output_locked = 0;
-        done_printing = 1;
     }
     else
         goto try_again;
@@ -32,10 +33,36 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
     out_raw((unsigned char*)buf, len);
 }
 
+static volatile sig_atomic_t request_complete;
+
+static void signal_master(void)
+{
+    request_complete = 0;
+    sigset_t block, old;
+
+    sigemptyset(&block);
+    sigaddset(&block, SIGUSR2);
+    sigprocmask(SIG_BLOCK, &block, &old);
+
+    kill(getppid(), SIGUSR1);
+
+    /* wait for a signal */
+    printf("Waiting for signal.\n");
+
+    sigsuspend(&old);
+    sigprocmask(SIG_SETMASK, &old, NULL);
+
+    errno = 0;
+    printf("Spinning until completed flag set.\n");
+    /* spin until we're done handling the request */
+    while(!request_complete) usleep(1);
+    printf("Request completely done.\n");
+}
+
 void send_master(unsigned char cmd)
 {
     write(to_parent, &cmd, 1);
-    kill(getppid(), SIGUSR1);
+    signal_master();
 }
 
 #define BUFSZ 128
@@ -51,10 +78,6 @@ tryagain:
     if(read(client_fd, buf, BUFSZ - 1) < 0)
         error("lost connection");
     buf[BUFSZ - 1] = '\0';
-    const unsigned char ctrlc[] = { 0xff, 0xf4, 0xff, 0xfd, 0x06 };
-
-    if(!memcmp(buf, ctrlc, sizeof(ctrlc)))
-        exit(0);
 
     printf("Read '%s'\n", buf);
     if(buf[0] & 0x80)
@@ -68,6 +91,16 @@ tryagain:
     return buf;
 }
 
+/* still not encrypted, but a bit more secure than echoing the pass */
+char *client_read_password(void)
+{
+    telnet_echo_off();
+    char *ret = client_read();
+    telnet_echo_on();
+    out("\n");
+    return ret;
+}
+
 void all_upper(char *s)
 {
     while(*s)
@@ -77,10 +110,17 @@ void all_upper(char *s)
     }
 }
 
-void sigusr2_handler(int s)
+void sigusr2_handler(int s, siginfo_t *info, void *vp)
 {
     (void) s;
-    printf("got SIGUSR2\n");
+    (void) vp;
+
+    sig_printf("got SIGUSR2\n");
+
+    /* we only listen to requests from our parent */
+    if(info->si_pid != getppid())
+        return;
+
     unsigned char cmd;
     read(from_parent, &cmd, 1);
     unsigned char buf[MSG_MAX + 1];
@@ -88,32 +128,40 @@ void sigusr2_handler(int s)
     {
     case REQ_BCASTMSG:
     {
-        printf("reading...\n");
-        size_t len = read(from_parent, buf, MSG_MAX);
-        printf("done reading\n");
+        sig_printf("reading...\n");
+        ssize_t len = read(from_parent, buf, MSG_MAX);
+        sig_printf("done reading\n");
         buf[MSG_MAX] = '\0';
         out_raw(buf, len);
         break;
     }
     case REQ_KICK:
     {
-        size_t len = read(from_parent, buf, MSG_MAX);
+        ssize_t len = read(from_parent, buf, MSG_MAX);
         buf[MSG_MAX] = '\0';
         out_raw(buf, len);
         exit(EXIT_SUCCESS);
     }
+    case REQ_NOP:
+        break;
     default:
-        fprintf(stderr, "WARNING: client process received unknown request\n");
+        sig_printf("WARNING: client process received unknown code %d\n", cmd);
         break;
     }
+
+    sig_printf("Client finishes handling request.\n");
+
+    request_complete = 1;
 }
 
 void client_change_state(int state)
 {
+    printf("Client requesting state transition\n");
     unsigned char cmdcode = REQ_CHANGESTATE;
     write(to_parent, &cmdcode, sizeof(cmdcode));
     write(to_parent, &state, sizeof(state));
-    kill(getppid(), SIGUSR1);
+    signal_master();
+    printf("State transition completed.\n");
 }
 
 void client_change_user(const char *user)
@@ -121,7 +169,7 @@ void client_change_user(const char *user)
     unsigned char cmdcode = REQ_CHANGEUSER;
     write(to_parent, &cmdcode, sizeof(cmdcode));
     write(to_parent, user, strlen(user) + 1);
-    kill(getppid(), SIGUSR1);
+    signal_master();
 }
 
 #define WSPACE " \t\r\n"
@@ -134,13 +182,22 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
 
     output_locked = 0;
 
-    signal(SIGUSR2, sigusr2_handler);
+    struct sigaction sa;
+
+    sigemptyset(&sa.sa_mask);
+
+    sa.sa_flags = SA_RESTART | SA_SIGINFO;
+    sa.sa_sigaction = sigusr2_handler;
+    if(sigaction(SIGUSR2, &sa, NULL) < 0)
+        error("sigaction");
 
     telnet_init();
 
     char *ip = inet_ntoa(addr->sin_addr);
     printf("New client %s\n", ip);
     printf("Total clients: %d\n", total);
+
+auth:
 
     out("NetCosm " NETCOSM_VERSION "\n");
     if(total > 1)
@@ -164,11 +221,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
         out("login: ");
         current_user = client_read();
         remove_cruft(current_user);
-        telnet_echo_off();
         out("Password: ");
-        char *pass = client_read();
-        telnet_echo_on();
-        out("\n");
+        char *pass = client_read_password();
         client_change_state(STATE_CHECKING);
         struct authinfo_t auth = auth_check(current_user, pass);
         memset(pass, 0, strlen(pass));
@@ -177,7 +231,6 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
         authlevel = auth.authlevel;
         if(auth.success)
         {
-            client_change_state(STATE_LOGGEDIN);
             out("Access Granted.\n\n");
             break;
         }
@@ -198,6 +251,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
     bool admin = (authlevel == PRIV_ADMIN);
     if(admin)
         client_change_state(STATE_ADMIN);
+    else
+        client_change_state(STATE_LOGGEDIN);
 
     /* authenticated */
     printf("Authenticated as %s\n", current_user);
@@ -220,6 +275,9 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
             if(!strcmp(tok, "USER"))
             {
                 char *what = strtok_r(NULL, WSPACE, &save);
+                if(!what)
+                    goto next_cmd;
+
                 all_upper(what);
 
                 if(!strcmp(what, "DEL"))
@@ -253,7 +311,20 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
                         out("New Password (_DO_NOT_USE_A_VALUABLE_PASSWORD_): ");
 
                         /* BAD BAD BAD BAD BAD BAD BAD CLEARTEXT PASSWORDS!!! */
-                        char *pass = client_read();
+                        char *pass = client_read_password();
+
+                        out("Verify Password: ");
+                        char *pass2 = client_read_password();
+
+                        if(strcmp(pass, pass2))
+                        {
+                            memset(pass, 0, strlen(pass));
+                            memset(pass2, 0, strlen(pass2));
+                            free(pass);
+                            free(pass2);
+                            out("Failure.\n");
+                            goto next_cmd;
+                        }
 
                         out("Admin privileges [y/N]? ");
                         char *allow_admin = client_read();
@@ -281,19 +352,19 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
             else if(!strcmp(tok, "CLIENT"))
             {
                 char *what = strtok_r(NULL, WSPACE, &save);
-                all_upper(what);
                 if(!what)
                 {
                     out("Usage: CLIENT <LIST|KICK> <PID>\n");
+                    goto next_cmd;
                 }
+
+                all_upper(what);
+
                 if(!strcmp(what, "LIST"))
                 {
-                    done_printing = 0;
                     unsigned char cmd_code = REQ_LISTCLIENTS;
                     write(to_parent, &cmd_code, sizeof(cmd_code));
-                    kill(getppid(), SIGUSR1);
-                    waitpid(-1, NULL, 0);
-                    while(!done_printing);
+                    signal_master();
                 }
                 else if(!strcmp(what, "KICK"))
                 {
@@ -307,7 +378,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
                         char buf[128];
                         int len = snprintf(buf, sizeof(buf), "You were kicked.\n");
                         write(to_parent, buf, len);
-                        kill(getppid(), SIGUSR1);
+                        signal_master();
+                        printf("Success.\n");
                     }
                     else
                         out("Usage: CLIENT KICK <PID>\n");
@@ -330,7 +402,26 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
             unsigned char cmd_code = REQ_BCASTMSG;
             write(to_parent, &cmd_code, sizeof(cmd_code));
             dprintf(to_parent, "%s says %s", current_user, what);
-            kill(getppid(), SIGUSR1);
+            signal_master();
+        }
+        else if(!strcmp(tok, "DATE"))
+        {
+            time_t t = time(NULL);
+            out("%s", ctime(&t));
+        }
+        else if(!strcmp(tok, "LOGOUT"))
+        {
+            out("Logged out.\n");
+            goto auth;
+        }
+        else if(!strcmp(tok, "LOOK"))
+        {
+            //out(room_get(client_room)->data.desc);
+            //out("\n");
+        }
+        else if(!strcmp(tok, "WAIT"))
+        {
+            send_master(REQ_WAIT);
         }
 
     next_cmd:

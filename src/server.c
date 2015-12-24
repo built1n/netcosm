@@ -88,7 +88,7 @@ static void sigchld_handler(int s, siginfo_t *info, void *vp)
 int port;
 
 static void handle_client(int fd, struct sockaddr_in *addr,
-                   int nclients, int to, int from)
+                          int nclients, int to, int from)
 {
     client_main(fd, addr, nclients, to, from);
 }
@@ -110,7 +110,7 @@ static void sigint_handler(int s)
 }
 
 static void req_pass_msg(unsigned char *data, size_t datalen,
-                  struct child_data *sender, struct child_data *child)
+                         struct child_data *sender, struct child_data *child)
 {
     (void) sender;
 
@@ -125,7 +125,7 @@ static void req_pass_msg(unsigned char *data, size_t datalen,
 }
 
 static void req_send_clientinfo(unsigned char *data, size_t datalen,
-                         struct child_data *sender, struct child_data *child)
+                                struct child_data *sender, struct child_data *child)
 {
     (void) data;
     (void) datalen;
@@ -142,16 +142,16 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
 
     if(child->user)
         len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s] USER %s\n",
-                 inet_ntoa(child->addr), child->pid, state[child->state], child->user);
+                       inet_ntoa(child->addr), child->pid, state[child->state], child->user);
     else
         len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s]\n",
-                 inet_ntoa(child->addr), child->pid, state[child->state]);
+                       inet_ntoa(child->addr), child->pid, state[child->state]);
 
     write(sender->outpipe[1], buf, len);
 }
 
 static void req_change_state(unsigned char *data, size_t datalen,
-                      struct child_data *sender, struct child_data *child)
+                             struct child_data *sender, struct child_data *child)
 {
     (void) child;
     if(datalen == sizeof(sender->state))
@@ -168,7 +168,7 @@ static void req_change_state(unsigned char *data, size_t datalen,
 }
 
 static void req_change_user(unsigned char *data, size_t datalen,
-                     struct child_data *sender, struct child_data *child)
+                            struct child_data *sender, struct child_data *child)
 {
     (void) data;
     (void) datalen;
@@ -185,7 +185,7 @@ static void req_change_user(unsigned char *data, size_t datalen,
 //}
 
 static void req_kick_client(unsigned char *data, size_t datalen,
-                     struct child_data *sender, struct child_data *child)
+                            struct child_data *sender, struct child_data *child)
 {
     (void) sender;
     if(datalen >= sizeof(pid_t))
@@ -201,9 +201,25 @@ static void req_kick_client(unsigned char *data, size_t datalen,
     }
 }
 
-static void req_wait(struct child_data *sender)
+static void req_wait(unsigned char *data, size_t len, struct child_data *sender)
 {
     sleep(10);
+}
+
+static void req_send_desc(unsigned char *data, size_t len, struct child_data *sender)
+{
+    struct room_t *room = room_get(sender->room);
+    write(sender->outpipe[1], room->data.desc, strlen(room->data.desc) + 1);
+
+    char newline = '\n';
+    write(sender->outpipe[1], &newline, 1);
+}
+
+static void req_change_room(unsigned char *data, size_t len, struct child_data *sender)
+{
+    room_id id = *((room_id*)data);
+
+    sender->room = id;
 }
 
 static const struct child_request {
@@ -218,7 +234,7 @@ static const struct child_request {
     void (*handle_child)(unsigned char *data, size_t len,
                          struct child_data *sender, struct child_data *child);
 
-    void (*finalize)(struct child_data *sender);
+    void (*finalize)(unsigned char *data, size_t len, struct child_data *sender);
 
     /* byte to write back to the sender */
     unsigned char cmd_to_send;
@@ -228,9 +244,10 @@ static const struct child_request {
     { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, NULL,              REQ_BCASTMSG },
     { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              REQ_NOP      },
     { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              REQ_NOP      },
-    //{ REQ_HANG,        false, CHILD_SENDER,         req_hang,            NULL,              REQ_NOP },
     { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP      },
     { REQ_WAIT,        false, CHILD_NONE,           NULL,                req_wait,          REQ_NOP      },
+    { REQ_LOOK,        false, CHILD_NONE,           NULL,                req_send_desc,     REQ_BCASTMSG },
+    { REQ_CHANGEROOM,  true,  CHILD_NONE,           NULL,                req_change_room,   REQ_NOP      },
 };
 
 void sig_printf(const char *fmt, ...)
@@ -343,7 +360,7 @@ static void sigusr1_handler(int s, siginfo_t *info, void *vp)
 finish:
 
     if(req && req->finalize)
-        req->finalize(sender);
+        req->finalize(data, datalen, sender);
 
     if(sender)
         kill(sender->pid, SIGUSR2);
@@ -468,6 +485,9 @@ int main(int argc, char *argv[])
             close(readpipe[0]);
             close(outpipe[1]);
             close(server_socket);
+
+            /* only the master process controls the world */
+            world_free();
 
             printf("Child with PID %d spawned\n", getpid());
 

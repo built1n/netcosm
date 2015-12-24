@@ -2,7 +2,7 @@
 
 static int client_fd, to_parent, from_parent;
 
-static room_id client_room;
+static room_id current_room = 0;
 
 static volatile sig_atomic_t output_locked = 0;
 
@@ -59,9 +59,11 @@ static void signal_master(void)
     printf("Request completely done.\n");
 }
 
-void send_master(unsigned char cmd)
+void send_master(unsigned char cmd, const void *data, size_t sz)
 {
     write(to_parent, &cmd, 1);
+    if(data)
+        write(to_parent, data, sz);
     signal_master();
 }
 
@@ -154,22 +156,21 @@ void sigusr2_handler(int s, siginfo_t *info, void *vp)
     request_complete = 1;
 }
 
-void client_change_state(int state)
+static void client_change_state(int state)
 {
     printf("Client requesting state transition\n");
-    unsigned char cmdcode = REQ_CHANGESTATE;
-    write(to_parent, &cmdcode, sizeof(cmdcode));
-    write(to_parent, &state, sizeof(state));
-    signal_master();
+    send_master(REQ_CHANGESTATE, &state, sizeof(state));
     printf("State transition completed.\n");
 }
 
-void client_change_user(const char *user)
+static void client_change_user(const char *user)
 {
-    unsigned char cmdcode = REQ_CHANGEUSER;
-    write(to_parent, &cmdcode, sizeof(cmdcode));
-    write(to_parent, user, strlen(user) + 1);
-    signal_master();
+    send_master(REQ_CHANGEUSER, user, strlen(user) + 1);
+}
+
+static void client_change_room(room_id id)
+{
+    send_master(REQ_CHANGEROOM, &id, sizeof(id));
 }
 
 #define WSPACE " \t\r\n"
@@ -257,6 +258,7 @@ auth:
     /* authenticated */
     printf("Authenticated as %s\n", current_user);
     client_change_user(current_user);
+    client_change_room(current_room);
     while(1)
     {
         out(">> ");
@@ -362,23 +364,22 @@ auth:
 
                 if(!strcmp(what, "LIST"))
                 {
-                    unsigned char cmd_code = REQ_LISTCLIENTS;
-                    write(to_parent, &cmd_code, sizeof(cmd_code));
-                    signal_master();
+                    send_master(REQ_LISTCLIENTS, NULL, 0);
                 }
                 else if(!strcmp(what, "KICK"))
                 {
                     char *pid_s = strtok_r(NULL, WSPACE, &save);
                     if(pid_s)
                     {
-                        unsigned char cmd_code = REQ_KICK;
-                        write(to_parent, &cmd_code, sizeof(cmd_code));
+                        /* weird pointer voodoo */
+                        /* TODO: simplify */
+                        char buf[MSG_MAX];
                         pid_t pid = strtol(pid_s, NULL, 0);
-                        write(to_parent, &pid, sizeof(pid));
-                        char buf[128];
-                        int len = snprintf(buf, sizeof(buf), "You were kicked.\n");
-                        write(to_parent, buf, len);
-                        signal_master();
+                        *((pid_t*)buf) = pid;
+                        int len = sizeof(pid_t) + snprintf(buf + sizeof(pid_t),
+                                                           sizeof(buf) - sizeof(pid_t),
+                                                           "You were kicked.\n");
+                        send_master(REQ_KICK, buf, len);
                         printf("Success.\n");
                     }
                     else
@@ -398,11 +399,11 @@ auth:
         }
         else if(!strcmp(tok, "SAY"))
         {
+            char buf[MSG_MAX];
             char *what = strtok_r(NULL, "", &save);
-            unsigned char cmd_code = REQ_BCASTMSG;
-            write(to_parent, &cmd_code, sizeof(cmd_code));
-            dprintf(to_parent, "%s says %s", current_user, what);
-            signal_master();
+            int len = snprintf(buf, sizeof(buf), "%s says %s", current_user, what);
+
+            send_master(REQ_BCASTMSG, buf, len);
         }
         else if(!strcmp(tok, "DATE"))
         {
@@ -416,12 +417,11 @@ auth:
         }
         else if(!strcmp(tok, "LOOK"))
         {
-            //out(room_get(client_room)->data.desc);
-            //out("\n");
+            send_master(REQ_LOOK, NULL, 0);
         }
         else if(!strcmp(tok, "WAIT"))
         {
-            send_master(REQ_WAIT);
+            send_master(REQ_WAIT, NULL, 0);
         }
 
     next_cmd:

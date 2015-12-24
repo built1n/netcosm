@@ -40,6 +40,8 @@
 #define REQ_HANG        5
 #define REQ_KICK        6
 #define REQ_WAIT        7
+#define REQ_LOOK        8
+#define REQ_CHANGEROOM  9
 
 /* child states */
 #define STATE_INIT      0
@@ -144,3 +146,4 @@ void remove_cruft(char*);
 void auth_list_users(void);
 void world_init(const struct roomdata_t *data, size_t sz);
 void sig_printf(const char *fmt, ...);
+void world_free(void);

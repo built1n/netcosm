@@ -215,11 +215,31 @@ static void req_send_desc(unsigned char *data, size_t len, struct child_data *se
     write(sender->outpipe[1], &newline, 1);
 }
 
-static void req_change_room(unsigned char *data, size_t len, struct child_data *sender)
+static void req_set_room(unsigned char *data, size_t len, struct child_data *sender)
 {
     room_id id = *((room_id*)data);
 
     sender->room = id;
+}
+
+static void req_move_room(unsigned char *data, size_t len, struct child_data *sender)
+{
+    enum direction_t dir = *((enum direction_t*)data);
+    struct room_t *current = room_get(sender->room);
+
+    /* TODO: checking */
+    room_id new = current->adjacent[dir];
+    int status;
+    if(new != ROOM_NONE)
+    {
+        sender->room = new;
+        status = 1;
+    }
+    else
+    {
+        status = 0;
+    }
+    write(sender->outpipe[1], &status, sizeof(status));
 }
 
 static const struct child_request {
@@ -247,7 +267,8 @@ static const struct child_request {
     { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP      },
     { REQ_WAIT,        false, CHILD_NONE,           NULL,                req_wait,          REQ_NOP      },
     { REQ_LOOK,        false, CHILD_NONE,           NULL,                req_send_desc,     REQ_BCASTMSG },
-    { REQ_CHANGEROOM,  true,  CHILD_NONE,           NULL,                req_change_room,   REQ_NOP      },
+    { REQ_SETROOM,     true,  CHILD_NONE,           NULL,                req_set_room,      REQ_NOP      },
+    { REQ_MOVE,        true,  CHILD_NONE,           NULL,                req_move_room,     REQ_MOVE     },
 };
 
 void sig_printf(const char *fmt, ...)

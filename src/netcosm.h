@@ -32,24 +32,27 @@
 
 /* child<->master commands */
 /* children might not implement all of these */
-#define REQ_NOP         0
-#define REQ_BCASTMSG    1
-#define REQ_LISTCLIENTS 2
-#define REQ_CHANGESTATE 3
-#define REQ_CHANGEUSER  4
-#define REQ_HANG        5
-#define REQ_KICK        6
-#define REQ_WAIT        7
-#define REQ_LOOK        8
-#define REQ_CHANGEROOM  9
+/* meanings might be different for the server and child, see comments */
+
+#define REQ_NOP         0 /* server, child: do nothing */
+#define REQ_BCASTMSG    1 /* server: broadcast text; child: print following text */
+#define REQ_LISTCLIENTS 2 /* server: list childs */
+#define REQ_CHANGESTATE 3 /* server: change child state flag */
+#define REQ_CHANGEUSER  4 /* server: change child login name */
+#define REQ_HANG        5 /* <UNIMP> server: loop forever */
+#define REQ_KICK        6 /* server: kick PID with message; child: print message, quit */
+#define REQ_WAIT        7 /* server: sleep 10s */
+#define REQ_LOOK        8 /* server: send child room description */
+#define REQ_SETROOM     9 /* server: set child room */
+#define REQ_MOVE        10 /* server: move child based on direction; child: success or failure */
 
 /* child states */
-#define STATE_INIT      0
-#define STATE_AUTH      1
-#define STATE_CHECKING  2
-#define STATE_LOGGEDIN  3
-#define STATE_ADMIN     4
-#define STATE_FAILED    5
+#define STATE_INIT      0 /* initial state */
+#define STATE_AUTH      1 /* at login screen */
+#define STATE_CHECKING  2 /* checking password */
+#define STATE_LOGGEDIN  3 /* logged in as user */
+#define STATE_ADMIN     4 /* logged in w/ admin privs */
+#define STATE_FAILED    5 /* failed a password attempt */
 
 /* for convenience when writing world specs */
 #define NONE_N  NULL
@@ -89,6 +92,8 @@ struct verb_t {
 };
 
 typedef int room_id;
+
+#define ROOM_NONE -1
 
 /* the data we get from a world module */
 struct roomdata_t {

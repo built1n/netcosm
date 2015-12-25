@@ -215,6 +215,15 @@ static void req_send_desc(unsigned char *data, size_t len, struct child_data *se
     write(sender->outpipe[1], &newline, 1);
 }
 
+static void req_send_roomname(unsigned char *data, size_t len, struct child_data *sender)
+{
+    struct room_t *room = room_get(sender->room);
+    write(sender->outpipe[1], room->data.name, strlen(room->data.name) + 1);
+
+    char newline = '\n';
+    write(sender->outpipe[1], &newline, 1);
+}
+
 static void req_set_room(unsigned char *data, size_t len, struct child_data *sender)
 {
     room_id id = *((room_id*)data);
@@ -228,6 +237,7 @@ static void req_move_room(unsigned char *data, size_t len, struct child_data *se
     struct room_t *current = room_get(sender->room);
 
     /* TODO: checking */
+    sig_printf("Moving in direction %d\n", dir);
     room_id new = current->adjacent[dir];
     int status;
     if(new != ROOM_NONE)
@@ -266,7 +276,8 @@ static const struct child_request {
     { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              REQ_NOP      },
     { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP      },
     { REQ_WAIT,        false, CHILD_NONE,           NULL,                req_wait,          REQ_NOP      },
-    { REQ_LOOK,        false, CHILD_NONE,           NULL,                req_send_desc,     REQ_BCASTMSG },
+    { REQ_GETROOMDESC, false, CHILD_NONE,           NULL,                req_send_desc,     REQ_BCASTMSG },
+    { REQ_GETROOMNAME, false, CHILD_NONE,           NULL,                req_send_roomname, REQ_BCASTMSG },
     { REQ_SETROOM,     true,  CHILD_NONE,           NULL,                req_set_room,      REQ_NOP      },
     { REQ_MOVE,        true,  CHILD_NONE,           NULL,                req_move_room,     REQ_MOVE     },
 };

@@ -20,6 +20,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "hash.h"
 #include "telnet.h"
 
 #define USERFILE "users.dat"
@@ -42,9 +43,10 @@
 #define REQ_HANG        5 /* <UNIMP> server: loop forever */
 #define REQ_KICK        6 /* server: kick PID with message; child: print message, quit */
 #define REQ_WAIT        7 /* server: sleep 10s */
-#define REQ_LOOK        8 /* server: send child room description */
+#define REQ_GETROOMDESC 8 /* server: send child room description */
 #define REQ_SETROOM     9 /* server: set child room */
 #define REQ_MOVE        10 /* server: move child based on direction; child: success or failure */
+#define REQ_GETROOMNAME 11 /* server: send child's room name */
 
 /* child states */
 #define STATE_INIT      0 /* initial state */
@@ -152,3 +154,6 @@ void auth_list_users(void);
 void world_init(const struct roomdata_t *data, size_t sz);
 void sig_printf(const char *fmt, ...);
 void world_free(void);
+
+/* only the master calls this */
+struct room_t *room_get(room_id id);

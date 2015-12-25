@@ -181,30 +181,59 @@ static void client_change_room(room_id id)
 
 static void client_move(const char *dir)
 {
-    struct {
+    const struct dir_pair {
         const char *text;
         enum direction_t val;
     } dirs[] = {
-        { "N", DIR_N },
-        { "NE", DIR_NE },
-        { "E",  DIR_E  },
-        { "SE", DIR_SE },
-        { "S",  DIR_S  },
-        { "SW", DIR_SW },
-        { "W",  DIR_W  },
-        { "NW", DIR_NW },
-        { "UP", DIR_UP },
-        { "DOWN", DIR_DOWN }
+        {  "N",          DIR_N     },
+        {  "NORTH",      DIR_N     },
+        {  "NE",         DIR_NE    },
+        {  "NORTHEAST",  DIR_N     },
+        {  "E",          DIR_E     },
+        {  "EAST",       DIR_E     },
+        {  "SE",         DIR_SE    },
+        {  "SOUTHEAST",  DIR_SE    },
+        {  "S",          DIR_S     },
+        {  "SOUTH",      DIR_S     },
+        {  "SW",         DIR_SW    },
+        {  "SOUTHWEST",  DIR_SW    },
+        {  "W",          DIR_W     },
+        {  "WEST",       DIR_W     },
+        {  "NW",         DIR_NW    },
+        {  "NORTHWEST",  DIR_NW    },
+        {  "U",          DIR_UP    },
+        {  "UP",         DIR_UP    },
+        {  "D",          DIR_DOWN  },
+        {  "DOWN",       DIR_DOWN  },
     };
-    for(unsigned i = 0; i < ARRAYLEN(dirs); ++i)
+    static void *map = NULL;
+    if(!map)
     {
-        if(!strcmp(dir, dirs[i].text))
+        map = hash_init(ARRAYLEN(dirs), hash_djb, strcmp);
+        for(unsigned i = 0; i < ARRAYLEN(dirs); ++i)
         {
-            send_master(REQ_MOVE, &dirs[i].val, sizeof(dirs[i].val));
-            return;
+            hash_insert(map, dirs[i].text, dirs + i);
+
+            void *new = hash_lookup(map, dirs[i].text);
+            if(new != dirs + i)
+                error("weird %p %p", new, dirs + i);
         }
     }
-    out("Unknown direction.\n");
+
+    struct dir_pair *pair = hash_lookup(map, dir);
+    if(pair)
+    {
+        send_master(REQ_MOVE, &pair->val, sizeof(pair->val));
+    }
+    else
+        out("Unknown direction.\n");
+}
+
+static void client_look(void)
+{
+    send_master(REQ_GETROOMNAME, NULL, 0);
+    out("\n");
+    send_master(REQ_GETROOMDESC, NULL, 0);
 }
 
 #define WSPACE " \t\r\n"
@@ -292,7 +321,9 @@ auth:
     /* authenticated */
     printf("Authenticated as %s\n", current_user);
     client_change_user(current_user);
+    current_room = 0;
     client_change_room(current_room);
+    client_look();
     while(1)
     {
         out(">> ");
@@ -451,7 +482,7 @@ auth:
         }
         else if(!strcmp(tok, "LOOK"))
         {
-            send_master(REQ_LOOK, NULL, 0);
+            client_look();
         }
         else if(!strcmp(tok, "WAIT"))
         {
@@ -460,8 +491,14 @@ auth:
         else if(!strcmp(tok, "GO"))
         {
             char *dir = strtok_r(NULL, WSPACE, &save);
-            all_upper(dir);
-            client_move(dir);
+            if(dir)
+            {
+                all_upper(dir);
+                client_move(dir);
+                client_look();
+            }
+            else
+                out("Expected direction after GO.\n");
         }
 
     next_cmd:

@@ -4,18 +4,26 @@ PLATFORM = unix
 
 NETCOSM_OBJ = src/server.o src/client.o src/auth.o src/telnet.o src/util.o src/room.o worlds/test.o src/hash.o
 
-CFLAGS = -Og -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow -Wpedantic
+CFLAGS = -Og -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow -std=gnu99
 LDFLAGS = -lgcrypt
 
-all: $(OUT)/$(PLATFORM).bin Makefile
+HEADERS = src/netcosm.h src/hash.h src/telnet.h
 
-$(OUT)/$(PLATFORM).bin: $(NETCOSM_OBJ) Makefile
-	mkdir -p $(OUT)
-	$(CC) $(NETCOSM_OBJ) $(CFLAGS) $(LDFLAGS) -o $(OUT)/$(PLATFORM).bin
+all: $(OUT)/$(PLATFORM).bin Makefile $(HEADERS)
+
+$(OUT)/$(PLATFORM).bin: $(NETCOSM_OBJ) $(HEADERS) Makefile
+	@mkdir -p $(OUT)
+	@echo "LD $<"
+	@$(CC) $(NETCOSM_OBJ) $(CFLAGS) $(LDFLAGS) -o $(OUT)/$(PLATFORM).bin
 
 install: $(OUT)/$(PLATFORM).bin
-	install $(OUT)/$(PLATFORM).bin /bin/netcosm
+	@install $(OUT)/$(PLATFORM).bin /bin/netcosm
 
 clean:
-	rm -f $(OUT)/$(PLATFORM).bin
-	rm -f $(NETCOSM_OBJ)
+	@echo "Cleaning build directory..."
+	@rm -f $(OUT)/$(PLATFORM).bin
+	@rm -f $(NETCOSM_OBJ)
+
+%.o: %.c Makefile $(HEADERS)
+	@echo "CC $<"
+	@$(CC) $(CFLAGS) $(OPTFLAGS) -c $< -o $@

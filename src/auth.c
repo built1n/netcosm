@@ -118,7 +118,7 @@ static int remove_user_internal(const char *user, int *found, char **filename)
     return out_fd;
 }
 
-bool auth_remove(const char *user2)
+bool auth_user_del(const char *user2)
 {
     char *user = strdup(user2);
     remove_cruft(user);
@@ -146,7 +146,7 @@ bool auth_remove(const char *user2)
     }
 }
 
-bool add_change_user(const char *user2, const char *pass2, int level)
+bool auth_user_add(const char *user2, const char *pass2, int level)
 {
     char *user = strdup(user2);
     remove_cruft(user);
@@ -221,7 +221,7 @@ void first_run_setup(void)
     getline(&admin_pass, &len, stdin);
     remove_cruft(admin_pass);
 
-    if(!add_change_user(admin_name, admin_pass, PRIV_ADMIN))
+    if(!auth_user_add(admin_name, admin_pass, PRIV_ADMIN))
         error("Unknown error");
 
     /* zero the memory */
@@ -277,9 +277,9 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
             unsigned int hash_len = gcry_md_get_algo_dlen(ALGO);
 
             if(strlen(hash) != hash_len * 2)
-                error("hash corrupt %d %d", strlen(hash), hash_len * 2);
+                error("hash corrupt (wrong length)");
             if(strlen(salt) != SALT_LEN)
-                error("salt corrupt");
+                error("salt corrupt (wrong length)");
 
             char *hex = hash_pass_hex(pass, salt);
 
@@ -314,7 +314,7 @@ bad:
     return ret;
 }
 
-void auth_list_users(void)
+void auth_user_list(void)
 {
     FILE *f = fopen(USERFILE, "r");
 

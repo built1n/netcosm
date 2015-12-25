@@ -1,4 +1,6 @@
 #include "hash.h"
+#include <stdlib.h>
+#include <string.h>
 
 struct hash_node {
     const void *key;
@@ -13,8 +15,9 @@ struct hash_map {
     size_t table_sz;
 };
 
-unsigned hash_djb(const char *str)
+unsigned hash_djb(const void *ptr)
 {
+    const char *str = ptr;
     unsigned hash = 5381;
     char c;
     while((c = *str++))
@@ -23,6 +26,12 @@ unsigned hash_djb(const char *str)
     }
 
     return hash;
+}
+
+/* wrapper to supress warnings */
+int compare_strings(const void *a, const void *b)
+{
+    return strcmp(a,b);
 }
 
 void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
@@ -97,4 +106,16 @@ void *hash_lookup(void *ptr, const void *key)
         iter = iter->next;
     }
     return NULL;
+}
+
+void hash_insert_pairs(void *ptr, const struct hash_pair *pairs,
+                       size_t pairsize, size_t n)
+{
+    const char *iter = (const char*)pairs;
+    for(unsigned i = 0; i < n; ++i)
+    {
+        const struct hash_pair *pair = (const struct hash_pair*)iter;
+        hash_insert(ptr, pair->key, pair);
+        iter += pairsize;
+    }
 }

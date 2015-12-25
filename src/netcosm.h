@@ -24,6 +24,8 @@
 #include "telnet.h"
 
 #define USERFILE "users.dat"
+#define WORLDFILE "world.dat"
+#define WORLD_MAGIC 0xff467777
 #define MAX_FAILURES 3
 #define NETCOSM_VERSION "v0.1"
 
@@ -34,7 +36,6 @@
 /* child<->master commands */
 /* children might not implement all of these */
 /* meanings might be different for the server and child, see comments */
-
 #define REQ_NOP         0 /* server, child: do nothing */
 #define REQ_BCASTMSG    1 /* server: broadcast text; child: print following text */
 #define REQ_LISTCLIENTS 2 /* server: list childs */
@@ -48,7 +49,7 @@
 #define REQ_MOVE        10 /* server: move child based on direction; child: success or failure */
 #define REQ_GETROOMNAME 11 /* server: send child's room name */
 
-/* child states */
+/* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */
 #define STATE_AUTH      1 /* at login screen */
 #define STATE_CHECKING  2 /* checking password */
@@ -67,6 +68,17 @@
 #define NONE_NW NULL
 #define NONE_UP NULL
 #define NONE_DN NULL
+#define NONE_IN NULL
+#define NONE_OT NULL
+
+#define MSG_MAX 512
+
+#define ROOM_NONE -1
+
+#define ARRAYLEN(x) (sizeof(x)/sizeof(x[0]))
+#define MAX(a,b) ((a>b)?(a):(b))
+
+typedef int room_id;
 
 struct authinfo_t {
     bool success;
@@ -74,14 +86,15 @@ struct authinfo_t {
     int authlevel;
 };
 
-/* logged in users are identified by the PID of the process serving them */
+/* used by the room module to keep track of users in rooms */
 struct user_t {
-    pid_t pid;
+    struct child_data *data;
+    struct user_t *next;
 };
 
-enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DOWN, NUM_DIRECTIONS };
+enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
 
-struct item_t {
+struct object_t {
     const char *class;
 
 };
@@ -93,22 +106,34 @@ struct verb_t {
     void (*execute)(const char *toks);
 };
 
-typedef int room_id;
+struct child_data {
+    pid_t pid;
+    int readpipe[2];
+    int outpipe[2];
 
-#define ROOM_NONE -1
+    int state;
+    room_id room;
+    char *user;
+
+    struct in_addr addr;
+
+    /* a linked list works well for this because no random-access is needed */
+    struct child_data *next;
+};
 
 /* the data we get from a world module */
 struct roomdata_t {
-    const char *uniq_id;
+    /* the non-const pointers can be modified by the world module */
+    const char * const uniq_id;
     const char *name;
     const char *desc;
 
-    const char *adjacent[NUM_DIRECTIONS];
+    const char * const adjacent[NUM_DIRECTIONS];
 
-    void (*hook_init)(room_id id);
-    void (*hook_enter)(room_id room, pid_t player);
-    void (*hook_say)(room_id room, pid_t player, const char *msg);
-    void (*hook_leave)(room_id room, pid_t player);
+    void (* const hook_init)(room_id id);
+    void (* const hook_enter)(room_id room, pid_t player);
+    void (* const hook_say)(room_id room, pid_t player, const char *msg);
+    void (* const hook_leave)(room_id room, pid_t player);
 };
 
 struct room_t {
@@ -118,42 +143,48 @@ struct room_t {
     room_id adjacent[NUM_DIRECTIONS];
 
     /* arrays instead of linked lists because insertion should be rare for these */
-    struct item_t *items;
-    size_t items_sz;
+    size_t objects_sz;
+    struct object_t *objects;
 
-    struct verb_t *verbs;
     size_t verbs_sz;
+    struct verb_t *verbs;
+
+    /* linked list for users, random access is rare */
+    struct user_t *users;
 };
 
-extern const struct roomdata_t netcosm_world[];
-extern const size_t netcosm_world_sz;
-
+/* called for every client */
 void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);
-void __attribute__((noreturn)) error(const char *fmt, ...);
+
 void first_run_setup(void);
-struct authinfo_t auth_check(const char*, const char*);
+
+/* authorization */
+struct authinfo_t auth_check(const char *user, const char *pass);
 
 /* add or change a user, NOT reentrant */
-bool add_change_user(const char *user2, const char *pass2, int level);
-bool auth_remove(const char*);
-
-void telnet_handle_command(const unsigned char*);
-
-#define ARRAYLEN(x) (sizeof(x)/sizeof(x[0]))
+bool auth_user_add(const char *user, const char *pass, int authlevel);
+bool auth_user_del(const char *user);
+void auth_user_list(void);
 
 void out(const char *fmt, ...) __attribute__((format(printf,1,2)));
 void out_raw(const unsigned char*, size_t);
+
 void telnet_init(void);
+void telnet_handle_command(const unsigned char*);
 void telnet_echo_on(void);
 void telnet_echo_off(void);
-#define MSG_MAX 512
 
-void remove_cruft(char*);
-
-void auth_list_users(void);
 void world_init(const struct roomdata_t *data, size_t sz);
-void sig_printf(const char *fmt, ...);
+bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz);
+void world_save(const char *fname);
+
+struct room_t *room_get(room_id id);
+bool room_user_add(room_id id, struct child_data *child);
+bool room_user_del(room_id id, struct child_data *child);
+
 void world_free(void);
 
-/* only the master calls this */
-struct room_t *room_get(room_id id);
+/* utility functions */
+void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
+void sig_printf(const char *fmt, ...);
+void remove_cruft(char*);

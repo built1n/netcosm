@@ -63,6 +63,49 @@ void hash_free(void *ptr)
     free(map);
 }
 
+void *hash_iterate(void *map, void **saveptr, void **keyptr)
+{
+    struct iterstate_t {
+        struct hash_map *map;
+        struct hash_node *node;
+        unsigned bucket;
+    };
+
+    struct iterstate_t *saved;
+
+    if(map)
+    {
+        *saveptr = malloc(sizeof(struct iterstate_t));
+        saved = *saveptr;
+
+        saved->map = map;
+        saved->bucket = 0;
+        saved->node = NULL;
+    }
+    else
+        saved = *saveptr;
+
+    for(;saved->bucket < saved->map->table_sz; ++(saved->bucket))
+    {
+        do {
+            if(!saved->node)
+                saved->node = saved->map->table[saved->bucket];
+            else
+                saved->node = saved->node->next;
+            if(saved->node)
+            {
+                if(keyptr)
+                    *keyptr = saved->node->key;
+                return (void*)saved->node->data;
+            }
+        } while(saved->node);
+    }
+
+    free(saved);
+
+    return NULL;
+}
+
 void *hash_insert(void *ptr, const void *key, const void *data)
 {
     struct hash_map *map = ptr;
@@ -118,4 +161,45 @@ void hash_insert_pairs(void *ptr, const struct hash_pair *pairs,
         hash_insert(ptr, pair->key, pair);
         iter += pairsize;
     }
+}
+
+bool hash_remove(void *ptr, void *key)
+{
+    struct hash_map *map = ptr;
+    unsigned hash = map->hash(key) % map->table_sz;
+
+    struct hash_node *iter = map->table[hash], *last = NULL;
+
+    while(iter)
+    {
+        if(map->compare(key, iter->key) == 0)
+        {
+            if(last)
+                last->next = iter->next;
+            else
+                map->table[hash] = iter->next;
+            free(iter);
+            return true;
+        }
+        last = iter;
+        iter = iter->next;
+    }
+
+    return false;
+}
+
+void *hash_getkeyptr(void *ptr, const void *key)
+{
+    struct hash_map *map = ptr;
+    unsigned hash = map->hash(key) % map->table_sz;
+
+    struct hash_node *iter = map->table[hash];
+
+    while(iter)
+    {
+        if(map->compare(key, iter->key) == 0)
+            return (void*)(iter->key);
+        iter = iter->next;
+    }
+    return NULL;
 }

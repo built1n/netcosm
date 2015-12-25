@@ -35,7 +35,7 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
 
 /* assume int is atomic */
 volatile int num_clients = 0;
-struct child_data *child_data;
+void *child_map = NULL;
 
 static void sigchld_handler(int s, siginfo_t *info, void *vp)
 {
@@ -50,20 +50,9 @@ static void sigchld_handler(int s, siginfo_t *info, void *vp)
     pid_t pid;
     while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
-        struct child_data *iter = child_data, *last = NULL;
-        while(iter)
-        {
-            if(iter->pid == pid)
-            {
-                if(!last)
-                    child_data = iter->next;
-                else
-                    last->next = iter->next;
-                free(iter);
-                break;
-            }
-            iter = iter->next;
-        }
+        void *key = hash_getkeyptr(child_map, &pid);
+        hash_remove(child_map, &pid);
+        free(key);
     }
 
     errno = saved_errno;
@@ -107,7 +96,9 @@ static void req_pass_msg(unsigned char *data, size_t datalen,
     }
 
     write(child->outpipe[1], data, datalen);
-    kill(child->pid, SIGUSR2);
+
+    if(sender->pid != child->pid)
+        kill(child->pid, SIGUSR2);
 }
 
 static void req_send_clientinfo(unsigned char *data, size_t datalen,
@@ -127,11 +118,16 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
     };
 
     if(child->user)
-        len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s] USER %s\n",
+        len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s] USER %s",
                        inet_ntoa(child->addr), child->pid, state[child->state], child->user);
     else
-        len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s]\n",
+        len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s]",
                        inet_ntoa(child->addr), child->pid, state[child->state]);
+
+    if(sender->pid == child->pid)
+        strncat(buf, " [YOU]\n", sizeof(buf));
+    else
+        strncat(buf, "\n", sizeof(buf));
 
     write(sender->outpipe[1], buf, len);
 }
@@ -317,80 +313,67 @@ static void sigusr1_handler(int s, siginfo_t *info, void *vp)
     unsigned char cmd, data[MSG_MAX + 1];
     const struct child_request *req = NULL;
     size_t datalen = 0;
-    struct child_data *sender = NULL;
+    struct child_data *sender = hash_lookup(child_map, &sender_pid);
 
-    /* we have to iterate over the linked list twice */
-    /* first to get the data, second to send it to the rest of the children */
-
-    struct child_data *iter = child_data;
-
-    while(iter)
+    if(!sender)
     {
-        if(!req)
-        {
-            if(iter->pid == sender_pid)
-            {
-                sender = iter;
-                read(iter->readpipe[0], &cmd, 1);
-                req = hash_lookup(request_map, &cmd);
-                if(!req)
-                {
-                    sig_printf("Unknown request.\n");
-                    return;
-                }
-
-                sig_printf("Got command %d\n", cmd);
-                if(req->havedata)
-                {
-                    datalen = read(iter->readpipe[0], data, sizeof(data));
-                }
-
-                write(sender->outpipe[1], &req->cmd_to_send, 1);
-
-                switch(req->which)
-                {
-                case CHILD_SENDER:
-                case CHILD_ALL:
-                    req->handle_child(data, datalen, sender, iter);
-                    if(req->which == CHILD_SENDER)
-                        goto finish;
-                    break;
-                case CHILD_NONE:
-                    goto finish;
-                default:
-                    break;
-                }
-            }
-        }
-        else
-        {
-            switch(req->which)
-            {
-            case CHILD_ALL:
-            case CHILD_ALL_BUT_SENDER:
-                req->handle_child(data, datalen, sender, iter);
-                break;
-            default:
-                break;
-            }
-        }
-        iter = iter->next;
+        printf("WARNING: got SIGUSR1 from unknown PID, ignoring.\n");
+        return;
     }
 
-    /* iterate over the rest of the children, if needed */
-    if(req && req->which != CHILD_SENDER)
+    read(sender->readpipe[0], &cmd, 1);
+    req = hash_lookup(request_map, &cmd);
+    if(!req)
     {
-        iter = child_data;
-        while(iter)
-        {
-            if(iter->pid == sender_pid)
-                break;
-
-            req->handle_child(data, datalen, sender, iter);
-
-            iter = iter->next;
-        }
+        sig_printf("Unknown request.\n");
+        return;
     }
+
+    sig_printf("Got command %d\n", cmd);
+    if(req->havedata)
+    {
+        datalen = read(sender->readpipe[0], data, sizeof(data));
+    }
+
+    write(sender->outpipe[1], &req->cmd_to_send, 1);
+
+    switch(req->which)
+    {
+    case CHILD_SENDER:
+    case CHILD_ALL:
+        req->handle_child(data, datalen, sender, sender);
+        if(req->which == CHILD_SENDER)
+            goto finish;
+        break;
+    case CHILD_NONE:
+        goto finish;
+    default:
+        break;
+    }
+
+    struct child_data *child = NULL;
+    void *ptr = child_map, *save;
+
+    do {
+        pid_t *key;
+        child = hash_iterate(ptr, &save, (void**)&key);
+        ptr = NULL;
+        if(!child)
+            break;
+        sig_printf("Iterating over PID %d\n", *key);
+        if(child->pid == sender->pid)
+            continue;
+
+        switch(req->which)
+        {
+        case CHILD_ALL:
+        case CHILD_ALL_BUT_SENDER:
+            req->handle_child(data, datalen, sender, child);
+            break;
+        default:
+            break;
+        }
+    } while(1);
 
 finish:
 
@@ -401,9 +384,6 @@ finish:
         kill(sender->pid, SIGUSR2);
     else
         sig_printf("WARN: unknown child sent request.\n");
-
-    if(!req)
-        sig_printf("WARN: unknown request, request ignored\n");
 
     sig_printf("finished handling client request\n");
 }
@@ -487,6 +467,9 @@ static int server_bind(void)
     return sock;
 }
 
+static SIMP_HASH(pid_t, pid_hash);
+static SIMP_EQUAL(pid_t, pid_equal);
+
 int main(int argc, char *argv[])
 {
     if(argc != 2)
@@ -508,7 +491,8 @@ int main(int argc, char *argv[])
 
     reqmap_init();
 
-    child_data = NULL;
+    /* this is set very low to make iteration faster */
+    child_map = hash_init(8, pid_hash, pid_equal);
 
     printf("Listening on port %d\n", port);
 
@@ -558,16 +542,18 @@ int main(int argc, char *argv[])
             close(outpipe[0]);
             close(new_sock);
 
-            /* add the child to the child list */
-            struct child_data *old = child_data;
-            child_data = malloc(sizeof(struct child_data));
-            memcpy(child_data->outpipe, outpipe, sizeof(outpipe));
-            memcpy(child_data->readpipe, readpipe, sizeof(readpipe));
-            child_data->addr = client.sin_addr;
-            child_data->next = old;
-            child_data->pid = pid;
-            child_data->state = STATE_INIT;
-            child_data->user = NULL;
+            /* add the child to the child map */
+            struct child_data *new = calloc(1, sizeof(struct child_data));
+            memcpy(new->outpipe, outpipe, sizeof(outpipe));
+            memcpy(new->readpipe, readpipe, sizeof(readpipe));
+            new->addr = client.sin_addr;
+            new->pid = pid;
+            new->state = STATE_INIT;
+            new->user = NULL;
+
+            pid_t *pidbuf = malloc(sizeof(pid_t));
+            *pidbuf = pid;
+            hash_insert(child_map, pidbuf, new);
         }
     }
 }

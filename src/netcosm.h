@@ -116,9 +116,6 @@ struct child_data {
     char *user;
 
     struct in_addr addr;
-
-    /* a linked list works well for this because no random-access is needed */
-    struct child_data *next;
 };
 
 /* the data we get from a world module */

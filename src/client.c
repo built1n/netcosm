@@ -116,14 +116,18 @@ void sigusr2_handler(int s, siginfo_t *info, void *vp)
     (void) s;
     (void) vp;
 
-    sig_printf("got SIGUSR2\n");
+    sig_printf("PID %d got SIGUSR2\n", getpid());
 
     /* we only listen to requests from our parent */
     if(info->si_pid != getppid())
+    {
+        sig_printf("Unknown PID sent SIGUSR2\n");
         return;
+    }
 
     unsigned char cmd;
     read(from_parent, &cmd, 1);
+    sig_printf("Got data from parent.\n");
     unsigned char buf[MSG_MAX + 1];
     switch(cmd)
     {
@@ -151,6 +155,7 @@ void sigusr2_handler(int s, siginfo_t *info, void *vp)
             out("Cannot go that way.\n");
     }
     case REQ_NOP:
+        sig_printf("NOP from parent.\n");
         break;
     default:
         sig_printf("WARNING: client process received unknown code %d\n", cmd);

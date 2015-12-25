@@ -125,11 +125,17 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     if(magic != WORLD_MAGIC)
         return false;
     read(fd, &world_sz, sizeof(world_sz));
+
     if(world)
+        /* possible memory leak here as strings allocated inside of world
+           aren't freed. avoided by loading only one world per instance */
         free(world);
+
     if(world_sz != data_sz)
         return false;
+
     world = calloc(world_sz, sizeof(struct room_t));
+
     for(unsigned i = 0; i < world_sz; ++i)
     {
         world[i].id = read_roomid(fd);

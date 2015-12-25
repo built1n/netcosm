@@ -1,10 +1,19 @@
 #include "hash.h"
 #include <string.h>
+#include <stdio.h>
 
 int main()
 {
-    struct hash_map *map = hash_init(10, hash_djb, strcmp);
-    hash_insert(map, "a", 42);
-    hash_insert(map, "b", 32);
-    printf("weird. %d\n", hash_lookup(map, "a"));
+    void *map = hash_init(10000, hash_djb, compare_strings);
+    hash_insert(map, "a",1);
+    hash_insert(map, "b",2);
+    void *ptr = map;
+    void *data = NULL;
+    void *save;
+    do {
+        char *key;
+        data = hash_iterate(ptr, &save, &key);
+        ptr = NULL;
+        printf("%d %s\n", data, key);
+    } while(data);
 }

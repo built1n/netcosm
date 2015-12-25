@@ -203,21 +203,16 @@ static void client_move(const char *dir)
         {  "NORTHWEST",  DIR_NW    },
         {  "U",          DIR_UP    },
         {  "UP",         DIR_UP    },
-        {  "D",          DIR_DOWN  },
-        {  "DOWN",       DIR_DOWN  },
+        {  "D",          DIR_DN    },
+        {  "DOWN",       DIR_DN    },
+        {  "IN",         DIR_IN    },
+        {  "OUT",        DIR_OT    },
     };
     static void *map = NULL;
     if(!map)
     {
-        map = hash_init(ARRAYLEN(dirs), hash_djb, strcmp);
-        for(unsigned i = 0; i < ARRAYLEN(dirs); ++i)
-        {
-            hash_insert(map, dirs[i].text, dirs + i);
-
-            void *new = hash_lookup(map, dirs[i].text);
-            if(new != dirs + i)
-                error("weird %p %p", new, dirs + i);
-        }
+        map = hash_init(ARRAYLEN(dirs), hash_djb, compare_strings);
+        hash_insert_pairs(map, (struct hash_pair*)dirs, sizeof(struct dir_pair), ARRAYLEN(dirs));
     }
 
     struct dir_pair *pair = hash_lookup(map, dir);
@@ -352,7 +347,7 @@ auth:
                     char *user = strtok_r(NULL, WSPACE, &save);
                     if(user)
                     {
-                    if(strcmp(user, current_user) && auth_remove(user))
+                    if(strcmp(user, current_user) && auth_user_del(user))
                         out("Success.\n");
                     else
                         out("Failure.\n");
@@ -401,7 +396,7 @@ auth:
 
                         free(allow_admin);
 
-                        if(add_change_user(user, pass, priv))
+                        if(auth_user_add(user, pass, priv))
                             out("Success.\n");
                         else
                             out("Failure.\n");
@@ -413,7 +408,7 @@ auth:
                 }
                 else if(!strcmp(what, "LIST"))
                 {
-                    auth_list_users();
+                    auth_user_list();
                 }
             }
             else if(!strcmp(tok, "CLIENT"))
@@ -438,13 +433,18 @@ auth:
                     {
                         /* weird pointer voodoo */
                         /* TODO: simplify */
-                        char buf[MSG_MAX];
+                        char pidbuf[MAX(sizeof(pid_t), MSG_MAX)];
                         pid_t pid = strtol(pid_s, NULL, 0);
-                        *((pid_t*)buf) = pid;
-                        int len = sizeof(pid_t) + snprintf(buf + sizeof(pid_t),
-                                                           sizeof(buf) - sizeof(pid_t),
+                        if(pid == getpid())
+                        {
+                            out("You cannot kick yourself. Use EXIT instead.\n");
+                            goto next_cmd;
+                        }
+                        memcpy(pidbuf, &pid, sizeof(pid));
+                        int len = sizeof(pid_t) + snprintf(pidbuf + sizeof(pid_t),
+                                                           sizeof(pidbuf) - sizeof(pid_t),
                                                            "You were kicked.\n");
-                        send_master(REQ_KICK, buf, len);
+                        send_master(REQ_KICK, pidbuf, len);
                         printf("Success.\n");
                     }
                     else

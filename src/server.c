@@ -35,21 +35,7 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
 
 /* assume int is atomic */
 volatile int num_clients = 0;
-
-static struct child_data {
-    pid_t pid;
-    int readpipe[2];
-    int outpipe[2];
-
-    int state;
-    room_id room;
-    char *user;
-
-    struct in_addr addr;
-
-    /* a linked list works well for this because no random-access is needed */
-    struct child_data *next;
-} *child_data;
+struct child_data *child_data;
 
 static void sigchld_handler(int s, siginfo_t *info, void *vp)
 {
@@ -153,7 +139,7 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
 static void req_change_state(unsigned char *data, size_t datalen,
                              struct child_data *sender, struct child_data *child)
 {
-    (void) child;
+    (void) data; (void) datalen; (void) child; (void) sender;
     if(datalen == sizeof(sender->state))
     {
         sender->state = *((int*)data);
@@ -170,9 +156,7 @@ static void req_change_state(unsigned char *data, size_t datalen,
 static void req_change_user(unsigned char *data, size_t datalen,
                             struct child_data *sender, struct child_data *child)
 {
-    (void) data;
-    (void) datalen;
-    (void) child;
+    (void) data; (void) datalen; (void) child; (void) sender;
     if(sender->user)
         free(sender->user);
     sender->user = strdup((char*)data);
@@ -187,7 +171,7 @@ static void req_change_user(unsigned char *data, size_t datalen,
 static void req_kick_client(unsigned char *data, size_t datalen,
                             struct child_data *sender, struct child_data *child)
 {
-    (void) sender;
+    (void) data; (void) datalen; (void) child; (void) sender;
     if(datalen >= sizeof(pid_t))
     {
         pid_t kicked_pid = *((pid_t*)data);
@@ -201,13 +185,15 @@ static void req_kick_client(unsigned char *data, size_t datalen,
     }
 }
 
-static void req_wait(unsigned char *data, size_t len, struct child_data *sender)
+static void req_wait(unsigned char *data, size_t datalen, struct child_data *sender)
 {
+    (void) data; (void) datalen; (void) sender;
     sleep(10);
 }
 
-static void req_send_desc(unsigned char *data, size_t len, struct child_data *sender)
+static void req_send_desc(unsigned char *data, size_t datalen, struct child_data *sender)
 {
+    (void) data; (void) datalen; (void) sender;
     struct room_t *room = room_get(sender->room);
     write(sender->outpipe[1], room->data.desc, strlen(room->data.desc) + 1);
 
@@ -215,8 +201,9 @@ static void req_send_desc(unsigned char *data, size_t len, struct child_data *se
     write(sender->outpipe[1], &newline, 1);
 }
 
-static void req_send_roomname(unsigned char *data, size_t len, struct child_data *sender)
+static void req_send_roomname(unsigned char *data, size_t datalen, struct child_data *sender)
 {
+    (void) data; (void) datalen; (void) sender;
     struct room_t *room = room_get(sender->room);
     write(sender->outpipe[1], room->data.name, strlen(room->data.name) + 1);
 
@@ -224,17 +211,27 @@ static void req_send_roomname(unsigned char *data, size_t len, struct child_data
     write(sender->outpipe[1], &newline, 1);
 }
 
-static void req_set_room(unsigned char *data, size_t len, struct child_data *sender)
+static void child_set_room(struct child_data *child, room_id id)
 {
-    room_id id = *((room_id*)data);
-
-    sender->room = id;
+    child->room = id;
+    room_user_add(id, child);
 }
 
-static void req_move_room(unsigned char *data, size_t len, struct child_data *sender)
+static void req_set_room(unsigned char *data, size_t datalen, struct child_data *sender)
 {
+    (void) data; (void) datalen; (void) sender;
+    room_id id = *((room_id*)data);
+
+    child_set_room(sender, id);
+}
+
+static void req_move_room(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) data; (void) datalen; (void) sender;
     enum direction_t dir = *((enum direction_t*)data);
     struct room_t *current = room_get(sender->room);
+
+    room_user_del(sender->room, sender);
 
     /* TODO: checking */
     sig_printf("Moving in direction %d\n", dir);
@@ -242,7 +239,7 @@ static void req_move_room(unsigned char *data, size_t len, struct child_data *se
     int status;
     if(new != ROOM_NONE)
     {
-        sender->room = new;
+        child_set_room(sender, new);
         status = 1;
     }
     else
@@ -280,7 +277,20 @@ static const struct child_request {
     { REQ_GETROOMNAME, false, CHILD_NONE,           NULL,                req_send_roomname, REQ_BCASTMSG },
     { REQ_SETROOM,     true,  CHILD_NONE,           NULL,                req_set_room,      REQ_NOP      },
     { REQ_MOVE,        true,  CHILD_NONE,           NULL,                req_move_room,     REQ_MOVE     },
+    //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,              REQ_BCASTMSG },
 };
+
+static void *request_map = NULL;
+
+static SIMP_HASH(unsigned char, uchar_hash);
+static SIMP_EQUAL(unsigned char, uchar_equal);
+
+static void reqmap_init(void)
+{
+    request_map = hash_init(ARRAYLEN(requests), uchar_hash, uchar_equal);
+    for(unsigned i = 0; i < ARRAYLEN(requests); ++i)
+        hash_insert(request_map, &requests[i].code, requests + i);
+}
 
 void sig_printf(const char *fmt, ...)
 {
@@ -322,14 +332,7 @@ static void sigusr1_handler(int s, siginfo_t *info, void *vp)
             {
                 sender = iter;
                 read(iter->readpipe[0], &cmd, 1);
-                for(unsigned int i = 0; i < ARRAYLEN(requests); ++i)
-                {
-                    if(cmd == requests[i].code)
-                    {
-                        req = requests + i;
-                        break;
-                    }
-                }
+                req = hash_lookup(request_map, &cmd);
                 if(!req)
                 {
                     sig_printf("Unknown request.\n");
@@ -439,6 +442,24 @@ static void check_userfile(void)
         error("cannot access "USERFILE);
 }
 
+/* "raw" world data, provided by the world module */
+extern const struct roomdata_t netcosm_world[];
+extern const size_t netcosm_world_sz;
+
+static void load_worldfile(void)
+{
+    if(access(WORLDFILE, F_OK) < 0)
+    {
+        world_init(netcosm_world, netcosm_world_sz);
+
+        world_save(WORLDFILE);
+    }
+    else if(access(WORLDFILE, R_OK | W_OK) < 0)
+        error("cannot access "WORLDFILE);
+    else
+        world_load(WORLDFILE, netcosm_world, netcosm_world_sz);
+}
+
 static int server_bind(void)
 {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -483,7 +504,9 @@ int main(int argc, char *argv[])
 
     check_userfile();
 
-    world_init(netcosm_world, netcosm_world_sz);
+    load_worldfile();
+
+    reqmap_init();
 
     child_data = NULL;
 

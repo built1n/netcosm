@@ -1,9 +1,7 @@
 #include "netcosm.h"
 
 #define SALT_LEN 12
-
 #define ALGO GCRY_MD_SHA512
-
 #define HASH_ITERS 500000
 
 static bool valid_login_name(const char *name);

@@ -53,8 +53,23 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
 
 static volatile sig_atomic_t request_complete;
 
+static int reqs_since_ts;
+static time_t ts = 0;
+
 void send_master(unsigned char cmd, const void *data, size_t sz)
 {
+    time_t t = time(NULL);
+    if(ts != t)
+    {
+        ts = t;
+        reqs_since_ts = 0;
+    }
+    if(reqs_since_ts++ > 10)
+    {
+        out("Rate limit exceeded.\n");
+        return;
+    }
+
     request_complete = 0;
 
     sigset_t block, old;
@@ -104,6 +119,8 @@ tryagain:
         free(buf);
         goto tryagain;
     }
+
+    remove_cruft(buf);
 
     return buf;
 }
@@ -484,7 +501,7 @@ auth:
         {
             char buf[MSG_MAX];
             char *what = strtok_r(NULL, "", &save);
-            int len = snprintf(buf, sizeof(buf), "%s says %s", current_user, what);
+            int len = snprintf(buf, sizeof(buf), "%s says %s\n", current_user, what);
 
             send_master(REQ_BCASTMSG, buf, len);
         }

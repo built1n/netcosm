@@ -86,7 +86,10 @@ static void serv_cleanup(void)
     close(server_socket);
     world_free();
     hash_free(request_map);
+    request_map = NULL;
     hash_free(child_map);
+    child_map = NULL;
+    _exit(0);
 }
 
 static void sigint_handler(int s)
@@ -194,7 +197,6 @@ static void req_kick_client(unsigned char *data, size_t datalen,
             write(child->outpipe[1], data + sizeof(pid_t), datalen - sizeof(pid_t));
             union sigval nothing;
             sigqueue(child->pid, SIGRTMIN, nothing);
-            ++num_acks_wanted;
         }
     }
 }
@@ -448,6 +450,8 @@ finish:
     union sigval junk;
     sigqueue(sender->pid, SIGRTMIN, junk);
 
+    sig_printf("Waiting for %d acks\n", num_acks_wanted);
+
     while(num_acks_recvd < num_acks_wanted)
     {
         sigsuspend(&old);
@@ -465,6 +469,8 @@ finish:
 
 static void master_ack_handler(int s, siginfo_t *info, void *v)
 {
+    (void) s;
+    (void) v;
     sig_printf("Parent gets ACK\n");
     if(inc_acks && hash_lookup(child_map, &info->si_pid))
     {
@@ -478,7 +484,6 @@ void init_signals(void)
     struct sigaction sa;
 
     sigemptyset(&sa.sa_mask);
-
     sa.sa_sigaction = sigchld_handler; // reap all dead processes
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     if (sigaction(SIGCHLD, &sa, NULL) < 0)
@@ -607,9 +612,18 @@ int main(int argc, char *argv[])
     while(1)
     {
         read_fds = active_fds;
-        int num_events = select(FD_SETSIZE, &read_fds, NULL, NULL, NULL);
-        if(num_events < 0)
-            error("select");
+        int num_events;
+        sigset_t all, old;
+        sigemptyset(&all);
+        sigaddset(&all, SIGPIPE);
+        sigprocmask(SIG_SETMASK, &all, &old);
+        do {
+            num_events = select(FD_SETSIZE, &read_fds, NULL, NULL, NULL);
+        } while (num_events < 0);
+
+        sigprocmask(SIG_SETMASK, &old, NULL);
+        //if(num_events < 0)
+        //    error("select");
 
         for(int i = 0; i < FD_SETSIZE; ++i)
         {
@@ -683,9 +697,8 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    /* must be data from a child */
-                    if(!handle_child_req(i))
-                        FD_CLR(i, &active_fds);
+                    /* data from a child's pipe */
+                    handle_child_req(i);
                 }
             }
         }

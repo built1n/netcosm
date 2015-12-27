@@ -1,3 +1,21 @@
+/*
+ *   NetCosm - a MUD server
+ *   Copyright (C) 2015 Franklin Wei
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "netcosm.h"
 
 static int client_fd, to_parent, from_parent;
@@ -35,35 +53,33 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
 
 static volatile sig_atomic_t request_complete;
 
-static void signal_master(void)
+void send_master(unsigned char cmd, const void *data, size_t sz)
 {
     request_complete = 0;
-    sigset_t block, old;
 
+    sigset_t block, old;
     sigemptyset(&block);
-    sigaddset(&block, SIGUSR2);
+    sigaddset(&block, SIGRTMIN);
     sigprocmask(SIG_BLOCK, &block, &old);
 
-    kill(getppid(), SIGUSR1);
+    pid_t our_pid = getpid();
+    size_t total_len = (data?sz:0) + 1;
 
-    /* wait for a signal */
-    printf("Waiting for signal.\n");
+    char header[sizeof(pid_t) + sizeof(size_t) + 1];
+
+    memcpy(header, &our_pid, sizeof(pid_t));
+    memcpy(header + sizeof(pid_t), &total_len, sizeof(size_t));
+    memcpy(header + sizeof(pid_t) + sizeof(size_t), &cmd, 1);
+
+    write(to_parent, header, sizeof(header));
+
+    if(data)
+        write(to_parent, data, sz);
 
     sigsuspend(&old);
     sigprocmask(SIG_SETMASK, &old, NULL);
 
-    errno = 0;
-
-    /* spin until we're done handling the request */
     while(!request_complete) usleep(1);
-}
-
-void send_master(unsigned char cmd, const void *data, size_t sz)
-{
-    write(to_parent, &cmd, 1);
-    if(data)
-        write(to_parent, data, sz);
-    signal_master();
 }
 
 #define BUFSZ 128
@@ -92,7 +108,7 @@ tryagain:
     return buf;
 }
 
-/* still not encrypted, but a bit more secure than echoing the pass */
+/* still not encrypted, but a bit more secure than echoing the password! */
 char *client_read_password(void)
 {
     telnet_echo_off();
@@ -111,17 +127,16 @@ void all_upper(char *s)
     }
 }
 
-void sigusr2_handler(int s, siginfo_t *info, void *vp)
+void sig_rt_0_handler(int s, siginfo_t *info, void *v)
 {
     (void) s;
-    (void) vp;
-
-    sig_printf("PID %d got SIGUSR2\n", getpid());
+    (void) v;
+    sig_printf("PID %d got SIGRTMIN+1\n", getpid());
 
     /* we only listen to requests from our parent */
     if(info->si_pid != getppid())
     {
-        sig_printf("Unknown PID sent SIGUSR2\n");
+        sig_printf("Unknown PID sent SIGRTMIN+1\n");
         return;
     }
 
@@ -145,6 +160,9 @@ void sigusr2_handler(int s, siginfo_t *info, void *vp)
         ssize_t len = read(from_parent, buf, MSG_MAX);
         buf[MSG_MAX] = '\0';
         out_raw(buf, len);
+        union sigval junk;
+        /* the master still expects an ACK */
+        sigqueue(getppid(), SIGRTMIN+1, junk);
         exit(EXIT_SUCCESS);
     }
     case REQ_MOVE:
@@ -165,6 +183,10 @@ void sigusr2_handler(int s, siginfo_t *info, void *vp)
     sig_printf("Client finishes handling request.\n");
 
     request_complete = 1;
+
+    /* signal the master that we're done */
+    union sigval junk;
+    sigqueue(getppid(), SIGRTMIN+1, junk);
 }
 
 static void client_change_state(int state)
@@ -246,15 +268,6 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
 
     output_locked = 0;
 
-    struct sigaction sa;
-
-    sigemptyset(&sa.sa_mask);
-
-    sa.sa_flags = SA_RESTART | SA_SIGINFO;
-    sa.sa_sigaction = sigusr2_handler;
-    if(sigaction(SIGUSR2, &sa, NULL) < 0)
-        error("sigaction");
-
     telnet_init();
 
     char *ip = inet_ntoa(addr->sin_addr);
@@ -334,7 +347,7 @@ auth:
         char *tok = strtok_r(cmd, WSPACE, &save);
 
         if(!tok)
-            continue;
+            goto next_cmd;
         all_upper(tok);
 
         if(admin)

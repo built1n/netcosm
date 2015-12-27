@@ -1,3 +1,21 @@
+/*
+ *   NetCosm - a MUD server
+ *   Copyright (C) 2015 Franklin Wei
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "netcosm.h"
 
 /* processed world data */
@@ -7,11 +25,6 @@ static size_t world_sz;
 struct room_t *room_get(room_id id)
 {
     return world + id;
-}
-
-void world_free(void)
-{
-    free(world);
 }
 
 bool room_user_add(room_id id, struct child_data *child)
@@ -82,7 +95,7 @@ room_id read_roomid(int fd)
     return ret;
 }
 
-const char *read_string(int fd)
+char *read_string(int fd)
 {
     size_t sz;
     read(fd, &sz, sizeof(sz));
@@ -106,13 +119,38 @@ void world_save(const char *fname)
         //write_string(fd, world[i].data.uniq_id);
         write_string(fd, world[i].data.name);
         write_string(fd, world[i].data.desc);
-        /* adjacency strings are only used when loading the world for the 1st time */
+        /* adjacency strings not serialized, only adjacent IDs */
 
         /* callbacks are static, so are not serialized */
 
         write(fd, world[i].adjacent, sizeof(world[i].adjacent));
     }
     close(fd);
+}
+
+static void room_free(struct room_t *room)
+{
+    while(room->users)
+    {
+        struct user_t *old = room->users;
+        room->users = room->users->next;
+        free(old);
+    }
+    free(room->data.name);
+    free(room->data.desc);
+}
+
+void world_free(void)
+{
+    if(world)
+    {
+        for(unsigned i = 0; i < world_sz; ++i)
+        {
+            room_free(world + i);
+        }
+        free(world);
+        world = NULL;
+    }
 }
 
 bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz)
@@ -127,9 +165,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     read(fd, &world_sz, sizeof(world_sz));
 
     if(world)
-        /* possible memory leak here as strings allocated inside of world
-           aren't freed. avoided by loading only one world per instance */
-        free(world);
+        world_free();
 
     if(world_sz != data_sz)
         return false;
@@ -166,6 +202,11 @@ void world_init(const struct roomdata_t *data, size_t sz)
     {
         world[i].id = i;
         memcpy(&world[i].data, &data[i], sizeof(data[i]));
+
+        /* have to strdup these strings so they can be freed later */
+        //world[i].uniq_id = strdup(world[i].uniq_id);
+        world[i].data.name = strdup(world[i].data.name);
+        world[i].data.desc = strdup(world[i].data.desc);
         printf("Loading room '%s'\n", world[i].data.uniq_id);
 
         if(hash_insert(map, world[i].data.uniq_id, world + i))
@@ -197,7 +238,8 @@ void world_init(const struct roomdata_t *data, size_t sz)
                 if(room)
                     world[i].adjacent[dir] = room->id;
                 else
-                    error("unknown room '%s' referenced from '%s'", adjacent_room, world[i].data.uniq_id);
+                    error("unknown room '%s' referenced from '%s'",
+                          adjacent_room, world[i].data.uniq_id);
             }
             else
                 world[i].adjacent[dir] = ROOM_NONE;
@@ -240,7 +282,7 @@ void world_init(const struct roomdata_t *data, size_t sz)
                 enum direction_t *opp = hash_lookup(dir_map, &j);
                 struct room_t *adj = room_get(world[i].adjacent[j]);
                 if(adj->adjacent[*opp] != i)
-                    printf("WARNING: Rooms '%s' and '%s' are not connected correctly.\n",
+                    printf("WARNING: Rooms '%s' and '%s' are one-way\n",
                            world[i].data.uniq_id, adj->data.uniq_id);
             }
         }

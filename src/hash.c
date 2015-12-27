@@ -1,3 +1,21 @@
+/*
+ *   NetCosm - a MUD server
+ *   Copyright (C) 2015 Franklin Wei
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "hash.h"
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +31,8 @@ struct hash_map {
     int (*compare)(const void *a, const void *b);
     struct hash_node **table;
     size_t table_sz;
+    void (*free_key)(void *key);
+    void (*free_data)(void *data);
 };
 
 unsigned hash_djb(const void *ptr)
@@ -46,21 +66,40 @@ void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
     return ret;
 }
 
-void hash_free(void *ptr)
+void hash_setfreekey_cb(void *ptr, void (*cb)(void *key))
 {
     struct hash_map *map = ptr;
-    for(unsigned i = 0; i < map->table_sz; ++i)
+    map->free_key = cb;
+}
+
+void hash_setfreedata_cb(void *ptr, void (*cb)(void *data))
+{
+    struct hash_map *map = ptr;
+    map->free_data = cb;
+}
+
+void hash_free(void *ptr)
+{
+    if(ptr)
     {
-        struct hash_node *node = map->table[i];
-        while(node)
+        struct hash_map *map = ptr;
+        for(unsigned i = 0; i < map->table_sz; ++i)
         {
-            struct hash_node *next = node->next;
-            free(node);
-            node = next;
+            struct hash_node *node = map->table[i];
+            while(node)
+            {
+                struct hash_node *next = node->next;
+                if(map->free_data)
+                    map->free_data((void*)node->data);
+                if(map->free_key)
+                    map->free_key((void*)node->key);
+                free(node);
+                node = next;
+            }
         }
+        free(map->table);
+        free(map);
     }
-    free(map->table);
-    free(map);
 }
 
 void *hash_iterate(void *map, void **saveptr, void **keyptr)
@@ -95,7 +134,7 @@ void *hash_iterate(void *map, void **saveptr, void **keyptr)
             if(saved->node)
             {
                 if(keyptr)
-                    *keyptr = saved->node->key;
+                    *keyptr = (void*)saved->node->key;
                 return (void*)saved->node->data;
             }
         } while(saved->node);
@@ -163,7 +202,7 @@ void hash_insert_pairs(void *ptr, const struct hash_pair *pairs,
     }
 }
 
-bool hash_remove(void *ptr, void *key)
+bool hash_remove(void *ptr, const void *key)
 {
     struct hash_map *map = ptr;
     unsigned hash = map->hash(key) % map->table_sz;
@@ -178,6 +217,10 @@ bool hash_remove(void *ptr, void *key)
                 last->next = iter->next;
             else
                 map->table[hash] = iter->next;
+            if(map->free_key)
+                map->free_key((void*)iter->key);
+            if(map->free_data)
+                map->free_data((void*)iter->data);
             free(iter);
             return true;
         }

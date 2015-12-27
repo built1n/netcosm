@@ -37,6 +37,14 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
 volatile int num_clients = 0;
 void *child_map = NULL;
 
+static void free_child_data(void *ptr)
+{
+    struct child_data *child = ptr;
+    if(child->user)
+        free(child->user);
+    free(ptr);
+}
+
 static void sigchld_handler(int s, siginfo_t *info, void *vp)
 {
     (void) s;
@@ -50,9 +58,7 @@ static void sigchld_handler(int s, siginfo_t *info, void *vp)
     pid_t pid;
     while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
-        void *key = hash_getkeyptr(child_map, &pid);
         hash_remove(child_map, &pid);
-        free(key);
     }
 
     errno = saved_errno;
@@ -70,12 +76,17 @@ static void handle_client(int fd, struct sockaddr_in *addr,
 
 int server_socket;
 
+static void *request_map = NULL;
+
 static void serv_cleanup(void)
 {
-    write(STDOUT_FILENO, "Shutdown server.\n", strlen("Shutdown server.\n"));
+    sig_printf("Shutdown server.\n");
     if(shutdown(server_socket, SHUT_RDWR) > 0)
         error("shutdown");
     close(server_socket);
+    world_free();
+    hash_free(request_map);
+    hash_free(child_map);
 }
 
 static void sigint_handler(int s)
@@ -83,6 +94,8 @@ static void sigint_handler(int s)
     (void) s;
     serv_cleanup();
 }
+
+static volatile sig_atomic_t num_acks_wanted, num_acks_recvd, inc_acks = 0;
 
 static void req_pass_msg(unsigned char *data, size_t datalen,
                          struct child_data *sender, struct child_data *child)
@@ -96,9 +109,13 @@ static void req_pass_msg(unsigned char *data, size_t datalen,
     }
 
     write(child->outpipe[1], data, datalen);
+    union sigval nothing;
 
     if(sender->pid != child->pid)
-        kill(child->pid, SIGUSR2);
+    {
+        sigqueue(child->pid, SIGRTMIN, nothing);
+        ++num_acks_wanted;
+    }
 }
 
 static void req_send_clientinfo(unsigned char *data, size_t datalen,
@@ -107,7 +124,6 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
     (void) data;
     (void) datalen;
     char buf[128];
-    int len;
     const char *state[] = {
         "INIT",
         "LOGIN SCREEN",
@@ -118,18 +134,18 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
     };
 
     if(child->user)
-        len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s] USER %s",
-                       inet_ntoa(child->addr), child->pid, state[child->state], child->user);
+        snprintf(buf, sizeof(buf), "Client %s PID %d [%s] USER %s",
+                 inet_ntoa(child->addr), child->pid, state[child->state], child->user);
     else
-        len = snprintf(buf, sizeof(buf), "Client %s PID %d [%s]",
-                       inet_ntoa(child->addr), child->pid, state[child->state]);
+        snprintf(buf, sizeof(buf), "Client %s PID %d [%s]",
+                 inet_ntoa(child->addr), child->pid, state[child->state]);
 
     if(sender->pid == child->pid)
         strncat(buf, " [YOU]\n", sizeof(buf));
     else
         strncat(buf, "\n", sizeof(buf));
 
-    write(sender->outpipe[1], buf, len);
+    write(sender->outpipe[1], buf, strlen(buf));
 }
 
 static void req_change_state(unsigned char *data, size_t datalen,
@@ -176,7 +192,9 @@ static void req_kick_client(unsigned char *data, size_t datalen,
             unsigned char cmd = REQ_KICK;
             write(child->outpipe[1], &cmd, 1);
             write(child->outpipe[1], data + sizeof(pid_t), datalen - sizeof(pid_t));
-            kill(child->pid, SIGUSR2);
+            union sigval nothing;
+            sigqueue(child->pid, SIGRTMIN, nothing);
+            ++num_acks_wanted;
         }
     }
 }
@@ -276,8 +294,6 @@ static const struct child_request {
     //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,              REQ_BCASTMSG },
 };
 
-static void *request_map = NULL;
-
 static SIMP_HASH(unsigned char, uchar_hash);
 static SIMP_EQUAL(unsigned char, uchar_equal);
 
@@ -301,38 +317,87 @@ void sig_printf(const char *fmt, ...)
     va_end(ap);
 }
 
-/* SIGUSR1 is used by children to communicate with the master process */
-/* the master handles commands that involve multiple children, i.e. message passing, listing clients, etc. */
-static void sigusr1_handler(int s, siginfo_t *info, void *vp)
+/**
+ * Here's how child-parent requests work
+ * 1. Child writes its PID and length of request to the parent's pipe, followed
+ *    by up to MSG_MAX bytes of data.
+ * 1.1 Child spins until parent response.
+ * 2. Parent handles the request.
+ * 3. Parent writes its PID and length of message back to the child(ren).
+ * 4. Parent signals child(ren) with SIGRTMIN
+ * 5. Child(ren) handle parent's message.
+ * 6. Child(ren) send the parent SIGRTMIN+1 to acknowledge receipt of message.
+ * 7. Parent spins until the needed number of signals is reached.
+ */
+
+static bool handle_child_req(int in_fd)
 {
-    (void) s;
-    (void) vp;
-    pid_t sender_pid = info->si_pid;
+    pid_t sender_pid;
+    if(read(in_fd, &sender_pid, sizeof(sender_pid)) != sizeof(pid_t))
+        return false;
     sig_printf("PID %d sends a client request\n", sender_pid);
 
-    unsigned char cmd, data[MSG_MAX + 1];
-    const struct child_request *req = NULL;
-    size_t datalen = 0;
+    size_t msglen;
+    if(read(in_fd, &msglen, sizeof(msglen)) != sizeof(msglen))
+        return false;
+
+    if(msglen > MSG_MAX)
+    {
+        sig_printf("message data too long, dropping\n");
+        return false;
+    }
+    else if(msglen < 1)
+    {
+        sig_printf("message too short to be valid, ignoring.\n");
+        return false;
+    }
+
+    unsigned char cmd, msg[MSG_MAX + 1];
     struct child_data *sender = hash_lookup(child_map, &sender_pid);
 
     if(!sender)
     {
-        printf("WARNING: got SIGUSR1 from unknown PID, ignoring.\n");
-        return;
+        printf("WARNING: got data from unknown PID, ignoring.\n");
+        return false;
     }
 
-    read(sender->readpipe[0], &cmd, 1);
-    req = hash_lookup(request_map, &cmd);
+    sigset_t old, block;
+
+    sigemptyset(&block);
+    sigaddset(&block, SIGRTMIN+1);
+    sigprocmask(SIG_BLOCK, &block, &old);
+
+    num_acks_wanted = 1;
+    num_acks_recvd  = 0;
+    inc_acks = 1;
+
+    unsigned char *msgptr = msg;
+    size_t have = 0;
+    while(have < msglen)
+    {
+        ssize_t ret = read(sender->readpipe[0], msgptr, msglen - have);
+        if(ret < 0)
+        {
+            sig_printf("unexpected EOF\n");
+            return true;
+        }
+        msgptr += ret;
+        have += ret;
+    }
+
+    cmd = msg[0];
+    msg[MSG_MAX] = '\0';
+
+    unsigned char *data = msg + 1;
+
+    size_t datalen = msglen - 1;
+
+    const struct child_request *req = hash_lookup(request_map, &cmd);
+
     if(!req)
     {
         sig_printf("Unknown request.\n");
-        return;
-    }
-
-    sig_printf("Got command %d\n", cmd);
-    if(req->havedata)
-    {
-        datalen = read(sender->readpipe[0], data, sizeof(data));
+        return true;
     }
 
     write(sender->outpipe[1], &req->cmd_to_send, 1);
@@ -380,12 +445,32 @@ finish:
     if(req && req->finalize)
         req->finalize(data, datalen, sender);
 
-    if(sender)
-        kill(sender->pid, SIGUSR2);
-    else
-        sig_printf("WARN: unknown child sent request.\n");
+    union sigval junk;
+    sigqueue(sender->pid, SIGRTMIN, junk);
+
+    while(num_acks_recvd < num_acks_wanted)
+    {
+        sigsuspend(&old);
+        sig_printf("Got %d total acks\n", num_acks_recvd);
+    }
+
+    inc_acks = 0;
+
+    sigprocmask(SIG_SETMASK, &old, NULL);
 
     sig_printf("finished handling client request\n");
+
+    return true;
+}
+
+static void master_ack_handler(int s, siginfo_t *info, void *v)
+{
+    sig_printf("Parent gets ACK\n");
+    if(inc_acks && hash_lookup(child_map, &info->si_pid))
+    {
+        ++num_acks_recvd;
+        sig_printf("%d acks now\n", num_acks_recvd);
+    }
 }
 
 void init_signals(void)
@@ -399,6 +484,8 @@ void init_signals(void)
     if (sigaction(SIGCHLD, &sa, NULL) < 0)
         error("sigaction");
 
+    sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGINT);
     sa.sa_handler = sigint_handler;
     sa.sa_flags = SA_RESTART;
     if(sigaction(SIGINT, &sa, NULL) < 0)
@@ -406,10 +493,25 @@ void init_signals(void)
     if(sigaction(SIGTERM, &sa, NULL) < 0)
         error("sigaction");
 
-    sigaddset(&sa.sa_mask, SIGUSR1);
-    sa.sa_sigaction = sigusr1_handler;
+    sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGRTMIN+1);
+    sa.sa_sigaction = master_ack_handler;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    if(sigaction(SIGRTMIN+1, &sa, NULL) < 0)
+        error("sigaction");
+
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = SIG_IGN;
+    sa.sa_flags = SA_RESTART;
+    if(sigaction(SIGPIPE, &sa, NULL) < 0)
+        error("sigaction");
+
+    /* set this now so there's no race condition later */
+    sigemptyset(&sa.sa_mask);
+    void sig_rt_0_handler(int s, siginfo_t *info, void *v);
+    sa.sa_sigaction = sig_rt_0_handler;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
-    if(sigaction(SIGUSR1, &sa, NULL) < 0)
+    if(sigaction(SIGRTMIN, &sa, NULL) < 0)
         error("sigaction");
 }
 
@@ -481,8 +583,8 @@ int main(int argc, char *argv[])
 
     server_socket = server_bind();
 
-    /* set up signal handlers for SIGCHLD, SIGUSR1, and SIGINT */
-    /* SIGUSR1 is used for broadcast signaling */
+    /* set up signal handlers */
+    /* SIGRTMIN+0 is used for broadcast signaling */
     init_signals();
 
     check_userfile();
@@ -492,68 +594,100 @@ int main(int argc, char *argv[])
     reqmap_init();
 
     /* this is set very low to make iteration faster */
-    child_map = hash_init(8, pid_hash, pid_equal);
+    child_map = hash_init(11, pid_hash, pid_equal);
+    hash_setfreedata_cb(child_map, free_child_data);
+    hash_setfreekey_cb(child_map, free);
 
     printf("Listening on port %d\n", port);
 
+    fd_set read_fds, active_fds;
+    FD_ZERO(&active_fds);
+    FD_SET(server_socket, &active_fds);
+
     while(1)
     {
-        struct sockaddr_in client;
-        socklen_t client_len = sizeof(client);
-        int new_sock = accept(server_socket, (struct sockaddr*) &client, &client_len);
-        if(new_sock < 0)
-            error("accept");
+        read_fds = active_fds;
+        int num_events = select(FD_SETSIZE, &read_fds, NULL, NULL, NULL);
+        if(num_events < 0)
+            error("select");
 
-        ++num_clients;
-
-        int readpipe[2]; /* child->parent */
-        int outpipe [2]; /* parent->child */
-
-        if(pipe(readpipe) < 0)
-            error("pipe");
-        if(pipe(outpipe) < 0)
-            error("pipe");
-
-        pid_t pid = fork();
-        if(pid < 0)
-            error("fork");
-
-        if(!pid)
+        for(int i = 0; i < FD_SETSIZE; ++i)
         {
-            /* child */
-            close(readpipe[0]);
-            close(outpipe[1]);
-            close(server_socket);
+            if(FD_ISSET(i, &read_fds))
+            {
+                if(server_socket == i)
+                {
+                    struct sockaddr_in client;
+                    socklen_t client_len = sizeof(client);
+                    int new_sock = accept(server_socket, (struct sockaddr*) &client, &client_len);
+                    if(new_sock < 0)
+                        error("accept");
 
-            /* only the master process controls the world */
-            world_free();
+                    ++num_clients;
 
-            printf("Child with PID %d spawned\n", getpid());
+                    int readpipe[2]; /* child->parent */
+                    int outpipe [2]; /* parent->child */
 
-            server_socket = new_sock;
+                    if(pipe(readpipe) < 0)
+                        error("pipe");
+                    if(pipe(outpipe) < 0)
+                        error("pipe");
 
-            handle_client(new_sock, &client, num_clients, readpipe[1], outpipe[0]);
+                    pid_t pid = fork();
+                    if(pid < 0)
+                        error("fork");
 
-            exit(0);
-        }
-        else
-        {
-            close(readpipe[1]);
-            close(outpipe[0]);
-            close(new_sock);
+                    if(!pid)
+                    {
+                        /* child */
+                        close(readpipe[0]);
+                        close(outpipe[1]);
+                        close(server_socket);
 
-            /* add the child to the child map */
-            struct child_data *new = calloc(1, sizeof(struct child_data));
-            memcpy(new->outpipe, outpipe, sizeof(outpipe));
-            memcpy(new->readpipe, readpipe, sizeof(readpipe));
-            new->addr = client.sin_addr;
-            new->pid = pid;
-            new->state = STATE_INIT;
-            new->user = NULL;
+                        /* only the master process controls the world */
+                        world_free();
+                        hash_free(request_map);
+                        request_map = NULL;
+                        hash_free(child_map);
+                        child_map = NULL;
 
-            pid_t *pidbuf = malloc(sizeof(pid_t));
-            *pidbuf = pid;
-            hash_insert(child_map, pidbuf, new);
+                        printf("Child with PID %d spawned\n", getpid());
+
+                        server_socket = new_sock;
+
+                        handle_client(new_sock, &client, num_clients, readpipe[1], outpipe[0]);
+
+                        exit(0);
+                    }
+                    else
+                    {
+                        /* parent */
+                        close(readpipe[1]);
+                        close(outpipe[0]);
+                        close(new_sock);
+
+                        /* add the child to the child map */
+                        struct child_data *new = calloc(1, sizeof(struct child_data));
+                        memcpy(new->outpipe, outpipe, sizeof(outpipe));
+                        memcpy(new->readpipe, readpipe, sizeof(readpipe));
+                        FD_SET(new->readpipe[0], &active_fds);
+                        new->addr = client.sin_addr;
+                        new->pid = pid;
+                        new->state = STATE_INIT;
+                        new->user = NULL;
+
+                        pid_t *pidbuf = malloc(sizeof(pid_t));
+                        *pidbuf = pid;
+                        hash_insert(child_map, pidbuf, new);
+                    }
+                }
+                else
+                {
+                    /* must be data from a child */
+                    if(!handle_child_req(i))
+                        FD_CLR(i, &active_fds);
+                }
+            }
         }
     }
 }

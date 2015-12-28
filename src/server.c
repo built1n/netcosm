@@ -335,8 +335,10 @@ static bool handle_child_req(int in_fd)
     if(read(in_fd, &sender_pid, sizeof(sender_pid)) != sizeof(sender_pid))
     {
         sig_debugf("Couldn't get sender PID\n");
-        goto fail;
+        return false;
     }
+
+    sig_debugf("Got request from PID %d\n", sender_pid);
 
     size_t msglen;
     const struct child_request *req = NULL;
@@ -702,7 +704,8 @@ int main(int argc, char *argv[])
                 else
                 {
                     /* data from a child's pipe */
-                    handle_child_req(i);
+                    if(!handle_child_req(i))
+                        FD_CLR(i, &active_fds);
                 }
             }
         }

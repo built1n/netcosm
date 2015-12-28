@@ -172,7 +172,7 @@ bool auth_user_add(const char *user2, const char *pass2, int level)
     char *pass = strdup(pass2);
     remove_cruft(pass);
 
-    printf("Add user '%s'\n", user);
+    debugf("Add user '%s'\n", user);
 
     if(!valid_login_name(user))
     {
@@ -220,20 +220,20 @@ static bool valid_login_name(const char *name)
 
 void first_run_setup(void)
 {
-    printf("Welcome to NetCosm!\n");
-    printf("Please set up the administrator account now.\n");
+    debugf("Welcome to NetCosm!\n");
+    debugf("Please set up the administrator account now.\n");
 
     char *admin_name;
     size_t len = 0;
     do {
         admin_name = NULL;
-        printf("Admin account name: ");
+        debugf("Admin account name: ");
         fflush(stdout);
         getline(&admin_name, &len, stdin);
         remove_cruft(admin_name);
     } while(!valid_login_name(admin_name));
 
-    printf("Admin password (_DO_NOT_ USE A VALUABLE PASSWORD): ");
+    debugf("Admin password (_DO_NOT_ USE A VALUABLE PASSWORD): ");
     fflush(stdout);
     char *admin_pass = NULL;
     len = 0;
@@ -325,13 +325,13 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
             free(line);
     }
 good:
-    printf("Successful authentication.\n");
+    debugf("Successful authentication.\n");
     fclose(f);
     return ret;
 bad:
     sleep(2);
     fclose(f);
-    printf("Failed authentication.\n");
+    debugf("Failed authentication.\n");
     return ret;
 }
 

@@ -115,8 +115,6 @@ tryagain:
     if(read(client_fd, buf, BUFSZ - 1) < 0)
         error("lost connection");
     buf[BUFSZ - 1] = '\0';
-
-    printf("Read '%s'\n", buf);
     if(buf[0] & 0x80)
     {
         telnet_handle_command((unsigned char*)buf);
@@ -153,9 +151,7 @@ static void print_all(int fd)
 {
     unsigned char buf[MSG_MAX + 1];
     do {
-        sig_printf("Reading...\n");
         ssize_t len = read(fd, &buf, MSG_MAX);
-        sig_printf("Read %d bytes\n", len);
         if(len <= 0)
             break;
         buf[MSG_MAX] = '\0';
@@ -167,19 +163,16 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
 {
     (void) s;
     (void) v;
-    sig_printf("PID %d got SIGRTMIN+1\n", getpid());
 
     /* we only listen to requests from our parent */
     if(info->si_pid != getppid())
     {
-        sig_printf("Unknown PID sent SIGRTMIN+1\n");
+        sig_debugf("Unknown PID sent SIGRTMIN+1\n");
         return;
     }
 
     unsigned char cmd;
     read(from_parent, &cmd, 1);
-    sig_printf("Got command from parent.\n");
-    unsigned char buf[MSG_MAX + 1];
     switch(cmd)
     {
     case REQ_BCASTMSG:
@@ -203,19 +196,13 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
             out("Cannot go that way.\n");
     }
     case REQ_NOP:
-        sig_printf("NOP from parent.\n");
         break;
     default:
-        sig_printf("WARNING: client process received unknown code %d\n", cmd);
-        ssize_t len = read(from_parent, buf, MSG_MAX);
-        if(len > 0)
-            sig_printf("DATA %d ___'%s'___", len, buf);
-        sleep(1);
-        kill(getppid(), SIGSEGV);
+        sig_debugf("WARNING: client process received unknown code %d\n", cmd);
         break;
     }
 
-    sig_printf("Client finishes handling request.\n");
+    sig_debugf("Client finishes handling request.\n");
 
     request_complete = 1;
 
@@ -226,9 +213,7 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
 
 static void client_change_state(int state)
 {
-    printf("Client requesting state transition\n");
     send_master(REQ_CHANGESTATE, &state, sizeof(state));
-    printf("State transition completed.\n");
 }
 
 static void client_change_user(const char *user)
@@ -306,8 +291,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
     telnet_init();
 
     char *ip = inet_ntoa(addr->sin_addr);
-    printf("New client %s\n", ip);
-    printf("Total clients: %d\n", total);
+    debugf("New client %s\n", ip);
+    debugf("Total clients: %d\n", total);
 
 auth:
 
@@ -367,7 +352,7 @@ auth:
         client_change_state(STATE_LOGGEDIN);
 
     /* authenticated */
-    printf("Authenticated as %s\n", current_user);
+    debugf("Authenticated as %s\n", current_user);
     client_change_user(current_user);
     current_room = 0;
     client_change_room(current_room);
@@ -498,7 +483,7 @@ auth:
                                                            sizeof(pidbuf) - sizeof(pid_t),
                                                            "You were kicked.\n");
                         send_master(REQ_KICK, pidbuf, len);
-                        printf("Success.\n");
+                        debugf("Success.\n");
                     }
                     else
                         out("Usage: CLIENT KICK <PID>\n");

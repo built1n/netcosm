@@ -50,7 +50,7 @@ void telnet_handle_command(const unsigned char *buf)
         {
             if(c == commands[i].val)
             {
-                printf("%s ", commands[i].name);
+                debugf("%s ", commands[i].name);
                 cmd = true;
                 goto found;
             }
@@ -62,14 +62,14 @@ void telnet_handle_command(const unsigned char *buf)
         default:
             break;
         }
-        printf("???: %d ", c);
+        debugf("???: %d ", c);
     found:
 
         ++buf;
     }
 
     if(cmd)
-        printf("\n");
+        debugf("\n");
 }
 
 void telnet_echo_off(void)

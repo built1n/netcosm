@@ -98,6 +98,14 @@
 #define MAX(a,b) ((a>b)?(a):(b))
 #define MIN(a,b) ((a<b)?(a):(b))
 
+#ifndef NDEBUG
+#define debugf(fmt,...) debugf_real(fmt, ##__VA_ARGS__)
+#define sig_debugf debugf
+#else
+#define debugf(fmt,...)
+#define sig_debugf debugf
+#endif
+
 typedef int room_id;
 
 struct authinfo_t {
@@ -205,5 +213,5 @@ void world_free(void);
 
 /* utility functions */
 void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
-void sig_printf(const char *fmt, ...);
+void debugf_real(const char *fmt, ...);
 void remove_cruft(char*);

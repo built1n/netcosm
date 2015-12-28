@@ -25,10 +25,10 @@ void remove_cruft(char *str)
 }
 
 /**
- * WARNING: not totally signal-safe
+ * WARNING: not signal-safe
  * TODO: rewrite to avoid calling *printf()
  */
-void sig_printf(const char *fmt, ...)
+void debugf_real(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);

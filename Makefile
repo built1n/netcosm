@@ -4,7 +4,7 @@ PLATFORM = unix
 
 NETCOSM_OBJ = src/server.o src/client.o src/auth.o src/telnet.o src/util.o src/room.o worlds/test.o src/hash.o
 
-CFLAGS = -Og -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow -std=gnu99
+CFLAGS = -O3 -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow -std=gnu99
 LDFLAGS = -lgcrypt
 
 HEADERS = src/netcosm.h src/hash.h src/telnet.h

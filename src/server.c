@@ -57,7 +57,7 @@ static void sigchld_handler(int s, siginfo_t *info, void *vp)
     pid_t pid;
     while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
-        sig_printf("Client disconnect.\n");
+        sig_debugf("Client disconnect.\n");
         struct child_data *child = hash_lookup(child_map, &pid);
         FD_CLR(child->readpipe[0], &active_fds);
 
@@ -83,7 +83,7 @@ static void *request_map = NULL;
 
 static void serv_cleanup(void)
 {
-    sig_printf("Shutdown server.\n");
+    sig_debugf("Shutdown server.\n");
     if(shutdown(server_socket, SHUT_RDWR) > 0)
         error("shutdown");
     close(server_socket);
@@ -161,13 +161,13 @@ static void req_change_state(unsigned char *data, size_t datalen,
     if(datalen == sizeof(sender->state))
     {
         sender->state = *((int*)data);
-        printf("State changed to %d\n", sender->state);
+        debugf("State changed to %d\n", sender->state);
     }
     else
     {
-        printf("State data is of the wrong size\n");
+        debugf("State data is of the wrong size\n");
         for(size_t i = 0; i < datalen; ++i)
-            printf("%02x\n", data[i]);
+            debugf("%02x\n", data[i]);
     }
 }
 
@@ -253,7 +253,7 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
     room_user_del(sender->room, sender);
 
     /* TODO: checking */
-    sig_printf("Moving in direction %d\n", dir);
+    sig_debugf("Moving in direction %d\n", dir);
     room_id new = current->adjacent[dir];
     int status;
     if(new != ROOM_NONE)
@@ -334,11 +334,9 @@ static bool handle_child_req(int in_fd)
 
     if(read(in_fd, &sender_pid, sizeof(sender_pid)) != sizeof(sender_pid))
     {
-        sig_printf("Couldn't get sender PID\n");
+        sig_debugf("Couldn't get sender PID\n");
         goto fail;
     }
-
-    sig_printf("PID %d sends a client request\n", sender_pid);
 
     size_t msglen;
     const struct child_request *req = NULL;
@@ -350,24 +348,24 @@ static bool handle_child_req(int in_fd)
 
     if(!sender)
     {
-        sig_printf("WARNING: got data from unknown PID, ignoring.\n");
+        sig_debugf("WARNING: got data from unknown PID, ignoring.\n");
         goto fail;
     }
 
     if(read(in_fd, &msglen, sizeof(msglen)) != sizeof(msglen))
     {
-        sig_printf("Couldn't read message length, dropping.\n");
+        sig_debugf("Couldn't read message length, dropping.\n");
         goto fail;
     }
 
     if(msglen < 1)
     {
-        sig_printf("message too short to be valid, ignoring.\n");
+        sig_debugf("message too short to be valid, ignoring.\n");
         goto fail;
     }
     else if(msglen > MSG_MAX)
     {
-        sig_printf("message too long, ignoring.\n");
+        sig_debugf("message too long, ignoring.\n");
         goto fail;
     }
 
@@ -378,7 +376,7 @@ static bool handle_child_req(int in_fd)
         ssize_t ret = read(sender->readpipe[0], msgptr, msglen - have);
         if(ret < 0)
         {
-            sig_printf("unexpected EOF\n");
+            sig_debugf("unexpected EOF\n");
             goto fail;
         }
         msgptr += ret;
@@ -405,7 +403,7 @@ static bool handle_child_req(int in_fd)
 
     if(!req)
     {
-        sig_printf("Unknown request.\n");
+        sig_debugf("Unknown request.\n");
         goto fail;
     }
 
@@ -434,7 +432,6 @@ static bool handle_child_req(int in_fd)
         ptr = NULL;
         if(!child)
             break;
-        sig_printf("Iterating over PID %d\n", *key);
         if(child->pid == sender->pid)
             continue;
 
@@ -458,21 +455,16 @@ finish:
     if(sender)
         sigqueue(sender->pid, SIGRTMIN, junk);
     else
-        sig_printf("Unknown PID send request.\n");
-
-    sig_printf("Waiting for %d acks\n", num_acks_wanted);
+        sig_debugf("Unknown PID sent request.\n");
 
     while(num_acks_recvd < MIN(num_clients,num_acks_wanted))
     {
         sigsuspend(&old);
-        sig_printf("Got %d total acks\n", num_acks_recvd);
     }
 
     inc_acks = 0;
 
     sigprocmask(SIG_SETMASK, &old, NULL);
-
-    sig_printf("finished handling client request\n");
 
     return true;
 fail:
@@ -484,11 +476,9 @@ static void master_ack_handler(int s, siginfo_t *info, void *v)
 {
     (void) s;
     (void) v;
-    sig_printf("Parent gets ACK\n");
     if(inc_acks && hash_lookup(child_map, &info->si_pid))
     {
         ++num_acks_recvd;
-        sig_printf("%d acks now\n", num_acks_recvd);
     }
 }
 
@@ -618,7 +608,7 @@ int main(int argc, char *argv[])
     hash_setfreedata_cb(child_map, free_child_data);
     hash_setfreekey_cb(child_map, free);
 
-    printf("Listening on port %d\n", port);
+    debugf("Listening on port %d\n", port);
 
     FD_ZERO(&active_fds);
     FD_SET(server_socket, &active_fds);
@@ -679,7 +669,7 @@ int main(int argc, char *argv[])
                         hash_free(child_map);
                         child_map = NULL;
 
-                        printf("Child with PID %d spawned\n", getpid());
+                        debugf("Child with PID %d spawned\n", getpid());
 
                         server_socket = new_sock;
 

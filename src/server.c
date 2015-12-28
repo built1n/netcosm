@@ -319,6 +319,24 @@ void sig_printf(const char *fmt, ...)
     va_end(ap);
 }
 
+static void force_read(int fd, void *buf, size_t n)
+{
+    unsigned char *ptr = buf;
+    size_t n_read = 0;
+    while(n_read < n)
+    {
+        ssize_t ret = read(fd, ptr, n - n_read);
+        ptr += ret;
+        n_read += ret;
+    }
+}
+
+static void empty_pipe(int fd)
+{
+    char buf[4096];
+    read(fd, buf, sizeof(buf));
+}
+
 /**
  * Here's how child-parent requests work
  * 1. Child writes its PID and length of request to the parent's pipe, followed
@@ -335,33 +353,67 @@ void sig_printf(const char *fmt, ...)
 static bool handle_child_req(int in_fd)
 {
     pid_t sender_pid;
-    if(read(in_fd, &sender_pid, sizeof(sender_pid)) != sizeof(pid_t))
-        return false;
+
+    if(read(in_fd, &sender_pid, sizeof(sender_pid)) != sizeof(sender_pid))
+    {
+        sig_printf("Couldn't get sender PID\n");
+        goto fail;
+    }
+
     sig_printf("PID %d sends a client request\n", sender_pid);
 
     size_t msglen;
-    if(read(in_fd, &msglen, sizeof(msglen)) != sizeof(msglen))
-        return false;
-
-    if(msglen > MSG_MAX)
-    {
-        sig_printf("message data too long, dropping\n");
-        return false;
-    }
-    else if(msglen < 1)
-    {
-        sig_printf("message too short to be valid, ignoring.\n");
-        return false;
-    }
+    const struct child_request *req = NULL;
+    size_t datalen;
 
     unsigned char cmd, msg[MSG_MAX + 1];
+
     struct child_data *sender = hash_lookup(child_map, &sender_pid);
 
     if(!sender)
     {
-        printf("WARNING: got data from unknown PID, ignoring.\n");
-        return false;
+        sig_printf("WARNING: got data from unknown PID, ignoring.\n");
+        goto fail;
     }
+
+    if(read(in_fd, &msglen, sizeof(msglen)) != sizeof(msglen))
+    {
+        sig_printf("Couldn't read message length, dropping.\n");
+        goto fail;
+    }
+
+    if(msglen < 1)
+    {
+        sig_printf("message too short to be valid, ignoring.\n");
+        goto fail;
+    }
+    else if(msglen > MSG_MAX)
+    {
+        sig_printf("message too long, ignoring.\n");
+        goto fail;
+    }
+
+    unsigned char *msgptr = msg;
+    size_t have = 0;
+    while(have < msglen)
+    {
+        ssize_t ret = read(sender->readpipe[0], msgptr, msglen - have);
+        if(ret < 0)
+        {
+            sig_printf("unexpected EOF\n");
+            goto fail;
+        }
+        msgptr += ret;
+        have += ret;
+    }
+
+    cmd = msg[0];
+    msg[MSG_MAX] = '\0';
+
+    unsigned char *data = msg + 1;
+
+    datalen = msglen - 1;
+    req = hash_lookup(request_map, &cmd);
 
     sigset_t old, block;
 
@@ -373,33 +425,10 @@ static bool handle_child_req(int in_fd)
     num_acks_recvd  = 0;
     inc_acks = 1;
 
-    unsigned char *msgptr = msg;
-    size_t have = 0;
-    while(have < msglen)
-    {
-        ssize_t ret = read(sender->readpipe[0], msgptr, msglen - have);
-        if(ret < 0)
-        {
-            sig_printf("unexpected EOF\n");
-            return true;
-        }
-        msgptr += ret;
-        have += ret;
-    }
-
-    cmd = msg[0];
-    msg[MSG_MAX] = '\0';
-
-    unsigned char *data = msg + 1;
-
-    size_t datalen = msglen - 1;
-
-    const struct child_request *req = hash_lookup(request_map, &cmd);
-
     if(!req)
     {
         sig_printf("Unknown request.\n");
-        return true;
+        goto fail;
     }
 
     write(sender->outpipe[1], &req->cmd_to_send, 1);
@@ -448,7 +477,10 @@ finish:
         req->finalize(data, datalen, sender);
 
     union sigval junk;
-    sigqueue(sender->pid, SIGRTMIN, junk);
+    if(sender)
+        sigqueue(sender->pid, SIGRTMIN, junk);
+    else
+        sig_printf("Unknown PID send request.\n");
 
     sig_printf("Waiting for %d acks\n", num_acks_wanted);
 
@@ -464,6 +496,9 @@ finish:
 
     sig_printf("finished handling client request\n");
 
+    return true;
+fail:
+    empty_pipe(in_fd);
     return true;
 }
 
@@ -484,6 +519,7 @@ void init_signals(void)
     struct sigaction sa;
 
     sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGCHLD);
     sa.sa_sigaction = sigchld_handler; // reap all dead processes
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     if (sigaction(SIGCHLD, &sa, NULL) < 0)
@@ -513,6 +549,7 @@ void init_signals(void)
 
     /* set this now so there's no race condition later */
     sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGRTMIN);
     void sig_rt_0_handler(int s, siginfo_t *info, void *v);
     sa.sa_sigaction = sig_rt_0_handler;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
@@ -598,8 +635,8 @@ int main(int argc, char *argv[])
 
     reqmap_init();
 
-    /* this is set very low to make iteration faster */
-    child_map = hash_init(11, pid_hash, pid_equal);
+    /* this initial size very low to make iteration faster */
+    child_map = hash_init(7, pid_hash, pid_equal);
     hash_setfreedata_cb(child_map, free_child_data);
     hash_setfreekey_cb(child_map, free);
 
@@ -644,7 +681,7 @@ int main(int argc, char *argv[])
 
                     if(pipe(readpipe) < 0)
                         error("pipe");
-                    if(pipe(outpipe) < 0)
+                    if(pipe2(outpipe, O_NONBLOCK) < 0)
                         error("pipe");
 
                     pid_t pid = fork();

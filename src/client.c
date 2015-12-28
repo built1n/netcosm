@@ -18,6 +18,8 @@
 
 #include "netcosm.h"
 
+static bool admin = false;
+
 static int client_fd, to_parent, from_parent;
 
 static room_id current_room = 0;
@@ -58,16 +60,19 @@ static time_t ts = 0;
 
 void send_master(unsigned char cmd, const void *data, size_t sz)
 {
-    time_t t = time(NULL);
-    if(ts != t)
+    if(!admin)
     {
-        ts = t;
-        reqs_since_ts = 0;
-    }
-    if(reqs_since_ts++ > 10)
-    {
-        out("Rate limit exceeded.\n");
-        return;
+        time_t t = time(NULL);
+        if(ts != t)
+        {
+            ts = t;
+            reqs_since_ts = 0;
+        }
+        if(reqs_since_ts++ > 10)
+        {
+            out("Rate limit exceeded.\n");
+            return;
+        }
     }
 
     request_complete = 0;
@@ -144,6 +149,20 @@ void all_upper(char *s)
     }
 }
 
+static void print_all(int fd)
+{
+    unsigned char buf[MSG_MAX + 1];
+    do {
+        sig_printf("Reading...\n");
+        ssize_t len = read(fd, &buf, MSG_MAX);
+        sig_printf("Read %d bytes\n", len);
+        if(len <= 0)
+            break;
+        buf[MSG_MAX] = '\0';
+        out_raw(buf, len);
+    } while(1);
+}
+
 void sig_rt_0_handler(int s, siginfo_t *info, void *v)
 {
     (void) s;
@@ -159,24 +178,18 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
 
     unsigned char cmd;
     read(from_parent, &cmd, 1);
-    sig_printf("Got data from parent.\n");
+    sig_printf("Got command from parent.\n");
     unsigned char buf[MSG_MAX + 1];
     switch(cmd)
     {
     case REQ_BCASTMSG:
     {
-        sig_printf("reading...\n");
-        ssize_t len = read(from_parent, buf, MSG_MAX);
-        sig_printf("done reading\n");
-        buf[MSG_MAX] = '\0';
-        out_raw(buf, len);
+        print_all(from_parent);
         break;
     }
     case REQ_KICK:
     {
-        ssize_t len = read(from_parent, buf, MSG_MAX);
-        buf[MSG_MAX] = '\0';
-        out_raw(buf, len);
+        print_all(from_parent);
         union sigval junk;
         /* the master still expects an ACK */
         sigqueue(getppid(), SIGRTMIN+1, junk);
@@ -194,6 +207,11 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         break;
     default:
         sig_printf("WARNING: client process received unknown code %d\n", cmd);
+        ssize_t len = read(from_parent, buf, MSG_MAX);
+        if(len > 0)
+            sig_printf("DATA %d ___'%s'___", len, buf);
+        sleep(1);
+        kill(getppid(), SIGSEGV);
         break;
     }
 
@@ -342,7 +360,7 @@ auth:
     if(authlevel == PRIV_NONE)
         return;
 
-    bool admin = (authlevel == PRIV_ADMIN);
+    admin = (authlevel == PRIV_ADMIN);
     if(admin)
         client_change_state(STATE_ADMIN);
     else

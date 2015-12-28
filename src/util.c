@@ -23,3 +23,20 @@ void remove_cruft(char *str)
     char *junk;
     strtok_r(str, "\r\n", &junk);
 }
+
+/**
+ * WARNING: not totally signal-safe
+ * TODO: rewrite to avoid calling *printf()
+ */
+void sig_printf(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+
+    char buf[128];
+    int len = vsnprintf(buf, sizeof(buf), fmt, ap);
+
+    write(STDOUT_FILENO, buf, len);
+
+    va_end(ap);
+}

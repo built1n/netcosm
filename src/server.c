@@ -36,6 +36,7 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
 /* assume int is atomic */
 volatile int num_clients = 0;
 void *child_map = NULL;
+static fd_set read_fds, active_fds;
 
 static void free_child_data(void *ptr)
 {
@@ -50,20 +51,22 @@ static void sigchld_handler(int s, siginfo_t *info, void *vp)
     (void) s;
     (void) info;
     (void) vp;
-    const char *msg = "Client disconnect.\n";
-    write(STDOUT_FILENO, msg, strlen(msg));
     // waitpid() might overwrite errno, so we save and restore it:
     int saved_errno = errno;
 
     pid_t pid;
     while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
+        sig_printf("Client disconnect.\n");
+        struct child_data *child = hash_lookup(child_map, &pid);
+        FD_CLR(child->readpipe[0], &active_fds);
+
+        --num_clients;
+
         hash_remove(child_map, &pid);
     }
 
     errno = saved_errno;
-
-    --num_clients;
 }
 
 int port;
@@ -306,31 +309,6 @@ static void reqmap_init(void)
         hash_insert(request_map, &requests[i].code, requests + i);
 }
 
-void sig_printf(const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-
-    char buf[128];
-    int len = vsnprintf(buf, sizeof(buf), fmt, ap);
-
-    write(STDOUT_FILENO, buf, len);
-
-    va_end(ap);
-}
-
-static void force_read(int fd, void *buf, size_t n)
-{
-    unsigned char *ptr = buf;
-    size_t n_read = 0;
-    while(n_read < n)
-    {
-        ssize_t ret = read(fd, ptr, n - n_read);
-        ptr += ret;
-        n_read += ret;
-    }
-}
-
 static void empty_pipe(int fd)
 {
     char buf[4096];
@@ -484,7 +462,7 @@ finish:
 
     sig_printf("Waiting for %d acks\n", num_acks_wanted);
 
-    while(num_acks_recvd < num_acks_wanted)
+    while(num_acks_recvd < MIN(num_clients,num_acks_wanted))
     {
         sigsuspend(&old);
         sig_printf("Got %d total acks\n", num_acks_recvd);
@@ -642,7 +620,6 @@ int main(int argc, char *argv[])
 
     printf("Listening on port %d\n", port);
 
-    fd_set read_fds, active_fds;
     FD_ZERO(&active_fds);
     FD_SET(server_socket, &active_fds);
 

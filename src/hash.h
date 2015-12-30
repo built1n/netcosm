@@ -30,10 +30,18 @@ void *hash_init(size_t tabsz, unsigned (*hash_fn)(const void*),
 void hash_setfreedata_cb(void*, void (*cb)(void *data));
 void hash_setfreekey_cb(void*,  void (*cb)(void *key));
 
+/*
+ * free all data associated with a map handle
+ *
+ * if callbacks for free'ing keys or data are installed, they will be
+ * called.
+ */
 void hash_free(void*);
 
-/* insert a pair, returns null if not already found, otherwise
-   return the existing data pointer */
+/*
+ * insert a pair, returns null if not already found, otherwise returns
+ * the existing data pointer
+ */
 void *hash_insert(void*, const void *key, const void *data);
 
 /* returns NULL if not found */
@@ -41,8 +49,15 @@ void *hash_lookup(void*, const void *key);
 
 bool hash_remove(void *ptr, const void *key);
 
-/* use like you would strtok_r */
-/* allocates a buffer that's freed once all elements are processed */
+/*
+ * use like you would strtok_r
+ *
+ * allocates a buffer that's freed once all elements are processed if
+ * you must stop iteration without processing every element,
+ * free(*saved)
+ *
+ * if keyptr!=NULL, the key pointer will be saved to *keyptr
+ */
 void *hash_iterate(void *map, void **saved, void **keyptr);
 
 struct hash_pair {

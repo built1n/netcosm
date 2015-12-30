@@ -318,7 +318,8 @@ static void empty_pipe(int fd)
 /**
  * Here's how child-parent requests work
  * 1. Child writes its PID and length of request to the parent's pipe, followed
- *    by up to MSG_MAX bytes of data.
+ *    by up to MSG_MAX bytes of data. If the length exceeds MSG_MAX bytes, the
+ *    request will be ignored.
  * 1.1 Child spins until parent response.
  * 2. Parent handles the request.
  * 3. Parent writes its PID and length of message back to the child(ren).
@@ -492,7 +493,7 @@ void init_signals(void)
     sigaddset(&sa.sa_mask, SIGCHLD);
     sa.sa_sigaction = sigchld_handler; // reap all dead processes
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
-    if (sigaction(SIGCHLD, &sa, NULL) < 0)
+    if(sigaction(SIGCHLD, &sa, NULL) < 0)
         error("sigaction");
 
     sigemptyset(&sa.sa_mask);
@@ -512,6 +513,7 @@ void init_signals(void)
         error("sigaction");
 
     sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGPIPE);
     sa.sa_handler = SIG_IGN;
     sa.sa_flags = SA_RESTART;
     if(sigaction(SIGPIPE, &sa, NULL) < 0)
@@ -536,22 +538,19 @@ static void check_userfile(void)
         error("cannot access "USERFILE);
 }
 
-/* "raw" world data, provided by the world module */
-extern const struct roomdata_t netcosm_world[];
-extern const size_t netcosm_world_sz;
-
 static void load_worldfile(void)
 {
     if(access(WORLDFILE, F_OK) < 0)
     {
-        world_init(netcosm_world, netcosm_world_sz);
+        world_init(netcosm_world, netcosm_world_sz, netcosm_world_name);
 
         world_save(WORLDFILE);
     }
     else if(access(WORLDFILE, R_OK | W_OK) < 0)
         error("cannot access "WORLDFILE);
     else
-        world_load(WORLDFILE, netcosm_world, netcosm_world_sz);
+        if(!world_load(WORLDFILE, netcosm_world, netcosm_world_sz, netcosm_world_name))
+            error("Failed to load world from disk.\nTry removing "WORLDFILE".\n");
 }
 
 static int server_bind(void)

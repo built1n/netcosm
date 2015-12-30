@@ -16,6 +16,8 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef _NC_H_
+#define _NC_H_
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -39,6 +41,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "auth.h"
 #include "hash.h"
 #include "telnet.h"
 
@@ -55,18 +58,19 @@
 /* child<->master commands */
 /* children might not implement all of these */
 /* meanings might be different for the server and child, see comments */
-#define REQ_NOP         0 /* server, child: do nothing */
-#define REQ_BCASTMSG    1 /* server: broadcast text; child: print following text */
-#define REQ_LISTCLIENTS 2 /* server: list childs */
-#define REQ_CHANGESTATE 3 /* server: change child state flag */
-#define REQ_CHANGEUSER  4 /* server: change child login name */
-#define REQ_HANG        5 /* <UNIMP> server: loop forever */
-#define REQ_KICK        6 /* server: kick PID with message; child: print message, quit */
-#define REQ_WAIT        7 /* server: sleep 10s */
-#define REQ_GETROOMDESC 8 /* server: send child room description */
-#define REQ_SETROOM     9 /* server: set child room */
-#define REQ_MOVE        10 /* server: move child based on direction; child: success or failure */
-#define REQ_GETROOMNAME 11 /* server: send child's room name */
+#define REQ_NOP               0 /* server, child: do nothing */
+#define REQ_BCASTMSG          1 /* server: broadcast text; child: print following text */
+#define REQ_LISTCLIENTS       2 /* server: list childs */
+#define REQ_CHANGESTATE       3 /* server: change child state flag */
+#define REQ_CHANGEUSER        4 /* server: change child login name */
+#define REQ_HANG              5 /* <UNIMP> server: loop forever */
+#define REQ_KICK              6 /* server: kick PID with message; child: print message, quit */
+#define REQ_WAIT              7 /* server: sleep 10s */
+#define REQ_GETROOMDESC       8 /* server: send child room description */
+#define REQ_SETROOM           9 /* server: set child room */
+#define REQ_MOVE              10 /* server: move child based on direction; child: success or failure */
+#define REQ_GETROOMNAME       11 /* server: send child's room name */
+#define REQ_LISTROOMCLIENTS   12 /* server: list clients in child's room */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */
@@ -107,12 +111,6 @@
 #endif
 
 typedef int room_id;
-
-struct authinfo_t {
-    bool success;
-    const char *user;
-    int authlevel;
-};
 
 /* used by the room module to keep track of users in rooms */
 struct user_t {
@@ -178,20 +176,15 @@ struct room_t {
 
     /* linked list for users, random access is rare */
     struct user_t *users;
+    int num_users;
 };
+
+extern const struct roomdata_t netcosm_world[];
+extern const size_t netcosm_world_sz;
+extern const char *netcosm_world_name;
 
 /* called for every client */
 void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);
-
-void first_run_setup(void);
-
-/* authorization */
-struct authinfo_t auth_check(const char *user, const char *pass);
-
-/* add or change a user, NOT reentrant */
-bool auth_user_add(const char *user, const char *pass, int authlevel);
-bool auth_user_del(const char *user);
-void auth_user_list(void);
 
 void out(const char *fmt, ...) __attribute__((format(printf,1,2)));
 void out_raw(const unsigned char*, size_t);
@@ -201,8 +194,8 @@ void telnet_handle_command(const unsigned char*);
 void telnet_echo_on(void);
 void telnet_echo_off(void);
 
-void world_init(const struct roomdata_t *data, size_t sz);
-bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz);
+void world_init(const struct roomdata_t *data, size_t sz, const char *name);
+bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz, const char *world_name);
 void world_save(const char *fname);
 
 struct room_t *room_get(room_id id);
@@ -215,3 +208,4 @@ void world_free(void);
 void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
 void debugf_real(const char *fmt, ...);
 void remove_cruft(char*);
+#endif

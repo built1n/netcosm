@@ -21,6 +21,7 @@
 /* processed world data */
 static struct room_t *world;
 static size_t world_sz;
+static char *world_name;
 
 struct room_t *room_get(room_id id)
 {
@@ -31,6 +32,9 @@ bool room_user_add(room_id id, struct child_data *child)
 {
     struct room_t *room = room_get(id);
     /* make sure there are no duplicates */
+
+    if(!room)
+        error("unknown room %d", id);
 
     struct user_t *iter = room->users, *last = NULL;
     while(iter)
@@ -50,6 +54,9 @@ bool room_user_add(room_id id, struct child_data *child)
         last->next = new;
     else
         room->users = new;
+
+    ++room->num_users;
+
     return true;
 }
 
@@ -67,6 +74,7 @@ bool room_user_del(room_id id, struct child_data *child)
             else
                 room->users = iter->next;
             free(iter);
+            --room->num_users;
             return true;
         }
         last = iter;
@@ -112,6 +120,7 @@ void world_save(const char *fname)
     uint32_t magic = WORLD_MAGIC;
     write(fd, &magic, sizeof(magic));
     write(fd, &world_sz, sizeof(world_sz));
+    write_string(fd, world_name);
     for(unsigned i = 0; i < world_sz; ++i)
     {
         write_roomid(fd, &world[i].id);
@@ -153,7 +162,14 @@ void world_free(void)
     }
 }
 
-bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz)
+/**
+ * Loads a world using data on disk and in memory.
+ *
+ * @param fname world file
+ * @param data world module data
+ * @param data_sz number of rooms in world module
+ */
+bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz, const char *name)
 {
     int fd = open(fname, O_RDONLY);
     if(fd < 0)
@@ -162,15 +178,24 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     read(fd, &magic, sizeof(magic));
     if(magic != WORLD_MAGIC)
         return false;
-    read(fd, &world_sz, sizeof(world_sz));
 
     if(world)
         world_free();
+
+    read(fd, &world_sz, sizeof(world_sz));
 
     if(world_sz != data_sz)
         return false;
 
     world = calloc(world_sz, sizeof(struct room_t));
+
+    world_name = read_string(fd);
+    if(strcmp(name, world_name))
+    {
+        free(world_name);
+        debugf("Incompatible world state.\n");
+        return false;
+    }
 
     for(unsigned i = 0; i < world_sz; ++i)
     {
@@ -190,11 +215,12 @@ static SIMP_HASH(enum direction_t, dir_hash);
 static SIMP_EQUAL(enum direction_t, dir_equal);
 
 /* loads room data (supplied by the world module) into our internal format */
-void world_init(const struct roomdata_t *data, size_t sz)
+void world_init(const struct roomdata_t *data, size_t sz, const char *name)
 {
     printf("Loading world with %lu rooms.\n", sz);
     world = calloc(sz, sizeof(struct room_t));
     world_sz = 0;
+    world_name = strdup(name);
 
     void *map = hash_init(1, hash_djb, compare_strings);
 

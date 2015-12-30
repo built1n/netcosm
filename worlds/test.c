@@ -33,18 +33,7 @@ const struct roomdata_t netcosm_world[] = {
         NULL,
         NULL,
     },
-
-    {
-        "test",
-        "blah",
-        "blah",
-        { "starting_room", NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, "starting_room", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
-        NULL,
-        NULL,
-        NULL,
-        NULL
-    },
-
 };
 
 const size_t netcosm_world_sz = ARRAYLEN(netcosm_world);
+const char *netcosm_world_name = "Test World 1.1";

@@ -288,6 +288,11 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
 
     output_locked = 0;
 
+    struct sigaction sa;
+    sa.sa_handler = SIG_DFL;
+    if(sigaction(SIGPIPE, &sa, NULL) < 0)
+        error("sigaction");
+
     telnet_init();
 
     char *ip = inet_ntoa(addr->sin_addr);

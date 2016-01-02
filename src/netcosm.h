@@ -18,6 +18,9 @@
 
 #ifndef _NC_H_
 #define _NC_H_
+
+#define _GNU_SOURCE /* for pipe2() */
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -44,6 +47,7 @@
 #include "auth.h"
 #include "hash.h"
 #include "telnet.h"
+#include "userdb.h"
 
 #define USERFILE "users.dat"
 #define WORLDFILE "world.dat"
@@ -96,8 +100,6 @@
 
 #define MSG_MAX 512
 
-#define ROOM_NONE -1
-
 #define ARRAYLEN(x) (sizeof(x)/sizeof(x[0]))
 #define MAX(a,b) ((a>b)?(a):(b))
 #define MIN(a,b) ((a<b)?(a):(b))
@@ -110,39 +112,11 @@
 #define sig_debugf debugf
 #endif
 
+#define ROOM_NONE -1
+
 typedef int room_id;
 
-/* used by the room module to keep track of users in rooms */
-struct user_t {
-    struct child_data *data;
-    struct user_t *next;
-};
-
 enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
-
-struct object_t {
-    const char *class;
-
-};
-
-struct verb_t {
-    const char *name;
-
-    /* toks is strtok_r's pointer */
-    void (*execute)(const char *toks);
-};
-
-struct child_data {
-    pid_t pid;
-    int readpipe[2];
-    int outpipe[2];
-
-    int state;
-    room_id room;
-    char *user;
-
-    struct in_addr addr;
-};
 
 /* the data we get from a world module */
 struct roomdata_t {
@@ -179,6 +153,36 @@ struct room_t {
     int num_users;
 };
 
+/* used by the room module to keep track of users in rooms */
+struct user_t {
+    struct child_data *data;
+    struct user_t *next;
+};
+
+struct object_t {
+    const char *class;
+
+};
+
+struct verb_t {
+    const char *name;
+
+    /* toks is strtok_r's pointer */
+    void (*execute)(const char *toks);
+};
+
+struct child_data {
+    pid_t pid;
+    int readpipe[2];
+    int outpipe[2];
+
+    int state;
+    room_id room;
+    char *user;
+
+    struct in_addr addr;
+};
+
 extern const struct roomdata_t netcosm_world[];
 extern const size_t netcosm_world_sz;
 extern const char *netcosm_world_name;
@@ -189,11 +193,7 @@ void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int fro
 void out(const char *fmt, ...) __attribute__((format(printf,1,2)));
 void out_raw(const unsigned char*, size_t);
 
-void telnet_init(void);
-void telnet_handle_command(const unsigned char*);
-void telnet_echo_on(void);
-void telnet_echo_off(void);
-
+/* room/world */
 void world_init(const struct roomdata_t *data, size_t sz, const char *name);
 bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz, const char *world_name);
 void world_save(const char *fname);
@@ -208,4 +208,5 @@ void world_free(void);
 void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
 void debugf_real(const char *fmt, ...);
 void remove_cruft(char*);
+
 #endif

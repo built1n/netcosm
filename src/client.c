@@ -172,7 +172,9 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     }
 
     unsigned char cmd;
+    /* drop this command */
     read(from_parent, &cmd, 1);
+
     switch(cmd)
     {
     case REQ_BCASTMSG:
@@ -209,6 +211,18 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     /* signal the master that we're done */
     union sigval junk;
     sigqueue(getppid(), SIGRTMIN+1, junk);
+}
+
+static void sigpipe_handler(int s)
+{
+    (void) s;
+    union sigval junk;
+    /*
+     * necessary in case we get SIGPIPE in our SIGRTMIN+1 handler,
+     * the master expects a response from us
+     */
+    sigqueue(getppid(), SIGRTMIN+1, junk);
+    _exit(0);
 }
 
 static void client_change_state(int state)
@@ -289,7 +303,9 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
     output_locked = 0;
 
     struct sigaction sa;
-    sa.sa_handler = SIG_DFL;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = sigpipe_handler;
+    sa.sa_flags = SA_RESTART;
     if(sigaction(SIGPIPE, &sa, NULL) < 0)
         error("sigaction");
 

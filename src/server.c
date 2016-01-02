@@ -309,12 +309,6 @@ static void reqmap_init(void)
         hash_insert(request_map, &requests[i].code, requests + i);
 }
 
-static void empty_pipe(int fd)
-{
-    char buf[4096];
-    read(fd, buf, sizeof(buf));
-}
-
 /**
  * Here's how child-parent requests work
  * 1. Child writes its PID and length of request to the parent's pipe, followed
@@ -471,7 +465,6 @@ finish:
 
     return true;
 fail:
-    empty_pipe(in_fd);
     return true;
 }
 
@@ -519,10 +512,12 @@ void init_signals(void)
     if(sigaction(SIGPIPE, &sa, NULL) < 0)
         error("sigaction");
 
-    /* set this now so there's no race condition later */
+    void sig_rt_0_handler(int s, siginfo_t *info, void *v);
+
+    /* we set this now so there's no race condition after a fork() */
     sigemptyset(&sa.sa_mask);
     sigaddset(&sa.sa_mask, SIGRTMIN);
-    void sig_rt_0_handler(int s, siginfo_t *info, void *v);
+    sigaddset(&sa.sa_mask, SIGPIPE);
     sa.sa_sigaction = sig_rt_0_handler;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     if(sigaction(SIGRTMIN, &sa, NULL) < 0)
@@ -540,7 +535,7 @@ static void check_userfile(void)
 
 static void load_worldfile(void)
 {
-    if(access(WORLDFILE, F_OK) < 0)
+    if(access(WORLDFILE, F_OK) < 0 || userdb_size() == 0)
     {
         world_init(netcosm_world, netcosm_world_sz, netcosm_world_name);
 
@@ -597,6 +592,8 @@ int main(int argc, char *argv[])
     /* set up signal handlers */
     /* SIGRTMIN+0 is used for broadcast signaling */
     init_signals();
+
+    userdb_init(USERFILE);
 
     check_userfile();
 

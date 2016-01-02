@@ -16,29 +16,25 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* commands */
-#define IAC  255
-#define DONT 254
-#define DO   253
-#define WONT 252
-#define WILL 251
-#define SB   250
-#define GA   249
-#define EL   248
-#define EC   247
-#define AYT  246
-#define IP   244
-#define NOP  241
-#define SE   240
+#define SALT_LEN 12
+#define ALGO GCRY_MD_SHA512
+#define AUTH_HASHLEN 64
+//#define HASH_ITERS 500000
+#define HASH_ITERS 1
 
-/* options */
-#define ECHO     1
-#define SGA      3
-#define STATUS   5
-#define NAWS     31
-#define LINEMODE 34
+struct authinfo_t {
+    bool success;
+    const char *user;
+    int authlevel;
+};
 
-void telnet_init(void);
-void telnet_handle_command(const unsigned char*);
-void telnet_echo_on(void);
-void telnet_echo_off(void);
+/* makes admin account */
+void first_run_setup(void);
+
+struct authinfo_t auth_check(const char *user, const char *pass);
+
+bool auth_user_add(const char *user, const char *pass, int authlevel);
+bool auth_user_del(const char *user);
+
+/* lists users through out() */
+void auth_user_list(void);

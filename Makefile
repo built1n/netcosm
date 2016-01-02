@@ -2,12 +2,12 @@ CC = gcc
 OUT = build
 PLATFORM = unix
 
-NETCOSM_OBJ = src/server.o src/client.o src/auth.o src/telnet.o src/util.o src/room.o worlds/test.o src/hash.o
+NETCOSM_OBJ = src/server.o src/client.o src/auth.o src/telnet.o src/util.o src/room.o worlds/test.o src/hash.o src/userdb.o
 
-CFLAGS = -Og -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow -std=gnu99
+CFLAGS = -Og -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow
 LDFLAGS = -lgcrypt
 
-HEADERS = src/netcosm.h src/hash.h src/telnet.h
+HEADERS = src/netcosm.h src/hash.h src/telnet.h src/userdb.h
 
 all: $(OUT)/$(PLATFORM).bin Makefile $(HEADERS)
 

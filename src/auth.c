@@ -18,11 +18,6 @@
 
 #include "netcosm.h"
 
-#define SALT_LEN 12
-#define ALGO GCRY_MD_SHA512
-//#define HASH_ITERS 500000
-#define HASH_ITERS 1
-
 static bool valid_login_name(const char *name);
 
 /* returns a pointer to a malloc-allocated buffer containing the salted hex hash of pass */
@@ -65,7 +60,7 @@ static char *hash_pass_hex(const char *pass, const char *salt)
     return hex;
 }
 
-static void add_user_append(int fd, const char *name, const char *pass, int authlevel)
+static void add_user_internal(const char *name, const char *pass, int authlevel)
 {
     char salt[SALT_LEN + 1];
     for(int i = 0; i < SALT_LEN; ++i)
@@ -74,16 +69,22 @@ static void add_user_append(int fd, const char *name, const char *pass, int auth
     }
     salt[SALT_LEN] = '\0';
 
-    char *hex = hash_pass_hex(pass, salt);
+    char *hexhash = hash_pass_hex(pass, salt);
 
-    /* write */
-    flock(fd, LOCK_EX);
-    if(dprintf(fd, "%s:%s:%s:%d\n", name, salt, hex, authlevel) < 0)
-        perror("dprintf");
-    flock(fd, LOCK_UN);
+    /* doesn't need to be malloc'd */
+    struct userdata_t userdata;
 
-    close(fd);
-    free(hex);
+    userdata.username = (char*)name;
+
+    memcpy(userdata.passhash, hexhash, sizeof(userdata.passhash));
+
+    free(hexhash);
+
+    userdata.priv = authlevel;
+
+    memcpy(userdata.salt, salt, sizeof(salt));
+
+    userdb_add(&userdata);
 }
 
 /* writes the contents of USERFILE to a temp file, and return its path, which is statically allocated */
@@ -107,7 +108,6 @@ static int remove_user_internal(const char *user, int *found, char **filename)
         char *junk;
         size_t buflen = 0;
         ssize_t len = getline(&line, &buflen, in_fd);
-
 
         /* getline's return value is the actual length of the line read */
         /* it's second argument in fact stores the length of the /buffer/, not the line */
@@ -181,19 +181,12 @@ bool auth_user_add(const char *user2, const char *pass2, int level)
         return false;
     }
 
-    /* remove any instances of the user in the file, write to temp file */
-    char *tmp;
-    int out_fd = remove_user_internal(user, NULL, &tmp);
-
     /* add user to end of temp file */
-    add_user_append(out_fd, user, pass, level);
-    close(out_fd);
+    add_user_internal(user, pass, level);
+
     free(user);
     memset(pass, 0, strlen(pass));
     free(pass);
-
-    /* rename temp file -> user list */
-    rename(tmp, USERFILE);
 
     return true;
 }

@@ -1,4 +1,5 @@
 #include "netcosm.h"
+#include "auth.h"
 
 /*
  * on-disk database for storing user data
@@ -7,7 +8,7 @@
  */
 
 struct userdata_t {
-    char *username;
+    char username[MAX_NAME_LEN + 1];
 
     char salt[SALT_LEN + 1];
 
@@ -23,7 +24,7 @@ void userdb_init(const char *dbfile);
 /* looks up a username in the DB, returns NULL upon failure */
 struct userdata_t *userdb_lookup(const char *username);
 
-void userdb_remove(const char *username);
+bool userdb_remove(const char *username);
 
 /* is it empty? */
 size_t userdb_size(void);

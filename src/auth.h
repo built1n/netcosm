@@ -1,6 +1,6 @@
 /*
  *   NetCosm - a MUD server
- *   Copyright (C) 2015 Franklin Wei
+ *   Copyright (C) 2016 Franklin Wei
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -16,9 +16,12 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef _AUTH_H_
+#define _AUTH_H_
+
 #define SALT_LEN 12
 #define ALGO GCRY_MD_SHA512
-#define AUTH_HASHLEN 64
+#define AUTH_HASHLEN (512/8)
 //#define HASH_ITERS 500000
 #define HASH_ITERS 1
 
@@ -31,10 +34,13 @@ struct authinfo_t {
 /* makes admin account */
 void first_run_setup(void);
 
-struct authinfo_t auth_check(const char *user, const char *pass);
+/* NULL on failure, user data struct on success */
+struct userdata_t *auth_check(const char *user, const char *pass);
 
 bool auth_user_add(const char *user, const char *pass, int authlevel);
 bool auth_user_del(const char *user);
 
 /* lists users through out() */
 void auth_user_list(void);
+
+#endif

@@ -1,6 +1,6 @@
 /*
  *   NetCosm - a MUD server
- *   Copyright (C) 2015 Franklin Wei
+ *   Copyright (C) 2016 Franklin Wei
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -74,7 +74,7 @@ static void add_user_internal(const char *name, const char *pass, int authlevel)
     /* doesn't need to be malloc'd */
     struct userdata_t userdata;
 
-    userdata.username = (char*)name;
+    strncpy(userdata.username, name, sizeof(userdata.username));
 
     memcpy(userdata.passhash, hexhash, sizeof(userdata.passhash));
 
@@ -84,57 +84,7 @@ static void add_user_internal(const char *name, const char *pass, int authlevel)
 
     memcpy(userdata.salt, salt, sizeof(salt));
 
-    userdb_add(&userdata);
-}
-
-/* writes the contents of USERFILE to a temp file, and return its path, which is statically allocated */
-static int remove_user_internal(const char *user, int *found, char **filename)
-{
-    FILE *in_fd = fopen(USERFILE, "a+");
-    static char tmp[32];
-    const char *template = "userlist_tmp.XXXXXX";
-    strncpy(tmp, template, sizeof(tmp));
-
-    int out_fd = mkstemp(tmp);
-
-    if(found)
-        *found = 0;
-    if(filename)
-        *filename = tmp;
-
-    while(1)
-    {
-        char *line = NULL;
-        char *junk;
-        size_t buflen = 0;
-        ssize_t len = getline(&line, &buflen, in_fd);
-
-        /* getline's return value is the actual length of the line read */
-        /* it's second argument in fact stores the length of the /buffer/, not the line */
-        if(len < 0)
-        {
-            free(line);
-            break;
-        }
-
-        char *old = strdup(line);
-
-        char *user_on_line = strtok_r(line, ":\r\n", &junk);
-
-        if(strcmp(user_on_line, user) != 0)
-        {
-            write(out_fd, old, len);
-        }
-        else
-            if(found)
-                (*found)++;
-        free(line);
-        free(old);
-    }
-
-    fclose(in_fd);
-
-    return out_fd;
+    userdb_request_add(&userdata);
 }
 
 bool auth_user_del(const char *user2)
@@ -142,22 +92,7 @@ bool auth_user_del(const char *user2)
     char *user = strdup(user2);
     remove_cruft(user);
     if(valid_login_name(user))
-    {
-        int found = 0;
-        char *tmp;
-        remove_user_internal(user, &found, &tmp);
-        free(user);
-        if(found)
-        {
-            rename(tmp, USERFILE);
-            return true;
-        }
-        else
-        {
-            remove(tmp);
-            return false;
-        }
-    }
+        return userdb_request_remove(user);
     else
     {
         free(user);
@@ -193,20 +128,15 @@ bool auth_user_add(const char *user2, const char *pass2, int level)
 
 static bool valid_login_name(const char *name)
 {
+    size_t len = 0;
     while(*name)
     {
         char c = *name++;
-        switch(c)
-        {
-        case ' ':
-        case ':':
-        case '\n':
-        case '\r':
-        case '\t':
+        ++len;
+        if(len > MAX_NAME_LEN)
             return false;
-        default:
-            break;
-        }
+        if(!(isalpha(c) || isdigit(c)))
+            return false;
     }
     return true;
 }
@@ -243,7 +173,7 @@ void first_run_setup(void)
     free(admin_pass);
 }
 
-struct authinfo_t auth_check(const char *name2, const char *pass2)
+struct userdata_t *auth_check(const char *name2, const char *pass2)
 {
     /* get our own copy to remove newlines */
     char *name = strdup(name2);
@@ -252,80 +182,28 @@ struct authinfo_t auth_check(const char *name2, const char *pass2)
     remove_cruft(pass);
 
     /* find it in the user list */
+    struct userdata_t *data = userdb_request_lookup(name);
+    char *salt = data->salt, *hash = data->passhash;
 
-    FILE *f = fopen(USERFILE, "r");
-
-    flock(fileno(f), LOCK_SH);
-
-    struct authinfo_t ret;
-    ret.success = false;
-    ret.authlevel = PRIV_NONE;
-    ret.user = NULL;
-
-    while(1)
+    if(data)
     {
-        char *line = NULL;
-        char *save;
-        size_t len = 0;
-        if(getline(&line, &len, f) < 0)
-        {
-            free(line);
-            free(name);
-            memset(pass, 0, strlen(pass));
-            free(pass);
-            goto bad;
-        }
-        if(!strcmp(strtok_r(line, ":\r\n", &save), name))
-        {
-            free(name);
+        char *new_hash_hex = hash_pass_hex(pass, salt);
 
-            char *salt = strdup(strtok_r(NULL, ":\r\n", &save));
-            char *hash = strdup(strtok_r(NULL, ":\r\n", &save));
+        memset(pass, 0, strlen(pass));
+        free(pass);
 
-            ret.authlevel = strtol(strtok_r(NULL, ":\r\n", &save), NULL, 10);
+        /* hashes are in HEX to avoid the Trucha bug */
+        bool success = !memcmp(new_hash_hex, hash, strlen(hash));
 
-            free(line);
+        free(new_hash_hex);
 
-            unsigned int hash_len = gcry_md_get_algo_dlen(ALGO);
-
-            if(strlen(hash) != hash_len * 2)
-                error("hash corrupt (wrong length)");
-            if(strlen(salt) != SALT_LEN)
-                error("salt corrupt (wrong length)");
-
-            char *hex = hash_pass_hex(pass, salt);
-
-            memset(pass, 0, strlen(pass));
-            free(pass);
-            free(salt);
-
-            if(!memcmp(hex, hash, hash_len * 2))
-            {
-                free(hex);
-                free(hash);
-                ret.success = true;
-                goto good;
-            }
-            else
-            {
-                free(hex);
-                free(hash);
-                ret.success = false;
-                goto bad;
-            }
-        }
-        else
-            free(line);
+        if(success)
+            return data;
     }
-good:
-    debugf("Successful authentication.\n");
-    fclose(f);
-    return ret;
-bad:
+
+    /* failure */
     sleep(2);
-    fclose(f);
-    debugf("Failed authentication.\n");
-    return ret;
+    return NULL;
 }
 
 void auth_user_list(void)

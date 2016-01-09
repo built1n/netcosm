@@ -1,6 +1,6 @@
 /*
  *   NetCosm - a MUD server
- *   Copyright (C) 2015 Franklin Wei
+ *   Copyright (C) 2016 Franklin Wei
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -44,45 +44,17 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "auth.h"
-#include "hash.h"
-#include "telnet.h"
-#include "userdb.h"
-
 #define USERFILE "users.dat"
 #define WORLDFILE "world.dat"
 #define WORLD_MAGIC 0xff467777
 #define MAX_FAILURES 3
 #define NETCOSM_VERSION "v0.1"
 
+#define MAX_NAME_LEN 20
+
 #define PRIV_NONE -1
 #define PRIV_USER 0
 #define PRIV_ADMIN 1337
-
-/* child<->master commands */
-/* children might not implement all of these */
-/* meanings might be different for the server and child, see comments */
-#define REQ_NOP               0 /* server, child: do nothing */
-#define REQ_BCASTMSG          1 /* server: broadcast text; child: print following text */
-#define REQ_LISTCLIENTS       2 /* server: list childs */
-#define REQ_CHANGESTATE       3 /* server: change child state flag */
-#define REQ_CHANGEUSER        4 /* server: change child login name */
-#define REQ_HANG              5 /* <UNIMP> server: loop forever */
-#define REQ_KICK              6 /* server: kick PID with message; child: print message, quit */
-#define REQ_WAIT              7 /* server: sleep 10s */
-#define REQ_GETROOMDESC       8 /* server: send child room description */
-#define REQ_SETROOM           9 /* server: set child room */
-#define REQ_MOVE              10 /* server: move child based on direction; child: success or failure */
-#define REQ_GETROOMNAME       11 /* server: send child's room name */
-#define REQ_LISTROOMCLIENTS   12 /* server: list clients in child's room */
-
-/* child states, sent as an int to the master */
-#define STATE_INIT      0 /* initial state */
-#define STATE_AUTH      1 /* at login screen */
-#define STATE_CHECKING  2 /* checking password */
-#define STATE_LOGGEDIN  3 /* logged in as user */
-#define STATE_ADMIN     4 /* logged in w/ admin privs */
-#define STATE_FAILED    5 /* failed a password attempt */
 
 /* for convenience when writing world specs */
 #define NONE_N  NULL
@@ -98,7 +70,7 @@
 #define NONE_IN NULL
 #define NONE_OT NULL
 
-#define MSG_MAX 512
+#define MSG_MAX 2048
 
 #define ARRAYLEN(x) (sizeof(x)/sizeof(x[0]))
 #define MAX(a,b) ((a>b)?(a):(b))
@@ -187,6 +159,15 @@ extern const struct roomdata_t netcosm_world[];
 extern const size_t netcosm_world_sz;
 extern const char *netcosm_world_name;
 
+#include "auth.h"
+#include "hash.h"
+#include "server_reqs.h"
+#include "telnet.h"
+#include "userdb.h"
+
+extern volatile int num_clients;
+extern void *child_map;
+
 /* called for every client */
 void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);
 
@@ -208,5 +189,15 @@ void world_free(void);
 void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
 void debugf_real(const char *fmt, ...);
 void remove_cruft(char*);
+
+extern enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN } reqdata_type;
+extern union reqdata_t {
+    struct userdata_t userdata;
+    bool boolean;
+} returned_reqdata;
+
+
+/* call from child process ONLY */
+void send_master(unsigned char cmd, const void *data, size_t sz);
 
 #endif

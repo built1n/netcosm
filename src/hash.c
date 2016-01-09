@@ -1,6 +1,6 @@
 /*
  *   NetCosm - a MUD server
- *   Copyright (C) 2015 Franklin Wei
+ *   Copyright (C) 2016 Franklin Wei
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
  */
 
 #include "hash.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -89,6 +90,7 @@ void hash_free(void *ptr)
             while(node)
             {
                 struct hash_node *next = node->next;
+
                 if(map->free_data)
                     map->free_data((void*)node->data);
                 if(map->free_key)

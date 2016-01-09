@@ -1,6 +1,6 @@
 /*
  *   NetCosm - a MUD server
- *   Copyright (C) 2015 Franklin Wei
+ *   Copyright (C) 2016 Franklin Wei
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -85,16 +85,18 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
     pid_t our_pid = getpid();
     size_t total_len = (data?sz:0) + 1;
 
-    char header[sizeof(pid_t) + sizeof(size_t) + 1];
+    if(!data)
+        sz = 0;
 
-    memcpy(header, &our_pid, sizeof(pid_t));
-    memcpy(header + sizeof(pid_t), &total_len, sizeof(size_t));
-    memcpy(header + sizeof(pid_t) + sizeof(size_t), &cmd, 1);
+    /* pack it all into one write so it's atomic */
+    char *req = malloc(1 + sizeof(pid_t) + sizeof(size_t) + sz);
 
-    write(to_parent, header, sizeof(header));
+    memcpy(req, &our_pid, sizeof(pid_t));
+    memcpy(req + sizeof(pid_t), &total_len, sizeof(size_t));
+    memcpy(req + sizeof(pid_t) + sizeof(size_t), &cmd, 1);
+    memcpy(req + sizeof(pid_t) + sizeof(size_t) + 1, data, sz);
 
-    if(data)
-        write(to_parent, data, sz);
+    write(to_parent, req, 1 + sizeof(pid_t) + sizeof(size_t) + sz);
 
     sigsuspend(&old);
     sigprocmask(SIG_SETMASK, &old, NULL);
@@ -159,6 +161,24 @@ static void print_all(int fd)
     } while(1);
 }
 
+struct userdata_t sent_userdata;
+bool child_req_success;
+
+enum reqdata_typespec reqdata_type = TYPE_NONE;
+union reqdata_t returned_reqdata;
+
+void read_string_max(int fd, char *buf, size_t max)
+{
+    size_t len;
+    if(read(fd, &len, sizeof(len)) != sizeof(len))
+        error("read_string_max");
+    if(len > max - 1)
+        error("read_string_max");
+    if(read(fd, buf, len) != (int)len)
+        error("unexpected EOF");
+    buf[max - 1] = '\0';
+}
+
 void sig_rt_0_handler(int s, siginfo_t *info, void *v)
 {
     (void) s;
@@ -171,8 +191,8 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         return;
     }
 
+    reqdata_type = TYPE_NONE;
     unsigned char cmd;
-    /* drop this command */
     read(from_parent, &cmd, 1);
 
     switch(cmd)
@@ -192,10 +212,32 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     }
     case REQ_MOVE:
     {
-        int status;
+        bool status;
         read(from_parent, &status, sizeof(status));
+        reqdata_type = TYPE_BOOLEAN;
+        returned_reqdata.boolean = status;
         if(!status)
             out("Cannot go that way.\n");
+    }
+    case REQ_GETUSERDATA:
+    {
+        sig_debugf("got user data\n");
+        bool success;
+        read(from_parent, &success, sizeof(success));
+        if(success)
+            reqdata_type = TYPE_USERDATA;
+        else
+        {
+            sig_debugf("failure\n");
+            break;
+        }
+
+        struct userdata_t *user = &returned_reqdata.userdata;
+        read_string_max(from_parent, user->username, sizeof(user->username));
+        read_string_max(from_parent, user->salt, sizeof(user->salt));
+        read_string_max(from_parent, user->passhash, sizeof(user->passhash));
+        read(from_parent, &user->priv, sizeof(user->priv));
+        break;
     }
     case REQ_NOP:
         break;
@@ -225,22 +267,22 @@ static void sigpipe_handler(int s)
     _exit(0);
 }
 
-static void client_change_state(int state)
+void client_change_state(int state)
 {
     send_master(REQ_CHANGESTATE, &state, sizeof(state));
 }
 
-static void client_change_user(const char *user)
+void client_change_user(const char *user)
 {
     send_master(REQ_CHANGEUSER, user, strlen(user) + 1);
 }
 
-static void client_change_room(room_id id)
+void client_change_room(room_id id)
 {
     send_master(REQ_SETROOM, &id, sizeof(id));
 }
 
-static void client_move(const char *dir)
+void client_move(const char *dir)
 {
     const struct dir_pair {
         const char *text;
@@ -285,7 +327,7 @@ static void client_move(const char *dir)
         out("Unknown direction.\n");
 }
 
-static void client_look(void)
+void client_look(void)
 {
     send_master(REQ_GETROOMNAME, NULL, 0);
     out("\n");
@@ -330,6 +372,7 @@ auth:
     int authlevel;
 
     char *current_user;
+    struct userdata_t *current_data = NULL;
 
     client_change_state(STATE_AUTH);
 
@@ -337,19 +380,25 @@ auth:
     while(1)
     {
         out("login: ");
+
         current_user = client_read();
         remove_cruft(current_user);
+
         out("Password: ");
+
         char *pass = client_read_password();
+
         client_change_state(STATE_CHECKING);
-        struct authinfo_t auth = auth_check(current_user, pass);
+
+        current_data = auth_check(current_user, pass);
+
         memset(pass, 0, strlen(pass));
         free(pass);
 
-        authlevel = auth.authlevel;
-        if(auth.success)
+        if(current_data)
         {
             out("Access Granted.\n\n");
+            authlevel = current_data->priv;
             break;
         }
         else
@@ -468,6 +517,10 @@ auth:
                 else if(!strcmp(what, "LIST"))
                 {
                     auth_user_list();
+                }
+                else
+                {
+                    out("Usage: USER <ADD|DEL|MODIFY|LIST> <ARGS>\n");
                 }
             }
             else if(!strcmp(tok, "CLIENT"))

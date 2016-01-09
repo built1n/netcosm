@@ -184,10 +184,7 @@ static void req_send_user(unsigned char *data, size_t datalen, struct child_data
         {
             bool confirm = true;
             write(sender->outpipe[1], &confirm, sizeof(confirm));
-            send_string(sender->outpipe[1], user->username);
-            send_string(sender->outpipe[1], user->salt);
-            send_string(sender->outpipe[1], user->passhash);
-            write(sender->outpipe[1], &user->priv, sizeof(user->priv));
+            write(sender->outpipe[1], user, sizeof(*user));
             return;
         }
 
@@ -198,6 +195,26 @@ static void req_send_user(unsigned char *data, size_t datalen, struct child_data
 
     bool fail = false;
     write(sender->outpipe[1], &fail, sizeof(fail));
+}
+
+static void req_del_user(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    bool success = false;
+    if(datalen)
+    {
+        success = userdb_remove((char*)data);
+    }
+    write(sender->outpipe[1], &success, sizeof(success));
+}
+
+static void req_add_user(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    bool success = false;
+    if(datalen == sizeof(struct userdata_t))
+    {
+        success = userdb_add((struct userdata_t*)data);
+    }
+    write(sender->outpipe[1], &success, sizeof(success));
 }
 
 static const struct child_request {

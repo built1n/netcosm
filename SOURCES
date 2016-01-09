@@ -1,0 +1,10 @@
+src/server.c
+src/client.c
+src/auth.c
+src/telnet.c
+src/util.c
+src/room.c
+worlds/test.c
+src/hash.c
+src/userdb.c
+src/server_reqs.c

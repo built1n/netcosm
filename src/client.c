@@ -233,10 +233,22 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         }
 
         struct userdata_t *user = &returned_reqdata.userdata;
-        read_string_max(from_parent, user->username, sizeof(user->username));
-        read_string_max(from_parent, user->salt, sizeof(user->salt));
-        read_string_max(from_parent, user->passhash, sizeof(user->passhash));
-        read(from_parent, &user->priv, sizeof(user->priv));
+        if(read(from_parent, user, sizeof(*user)) != sizeof(*user))
+            error("user data too short");
+        break;
+    }
+    case REQ_DELUSERDATA:
+    {
+        reqdata_type = TYPE_BOOLEAN;
+        if(read(from_parent, &returned_reqdata.boolean, sizeof(bool)) != sizeof(bool))
+            error("error reading bool");
+        break;
+    }
+    case REQ_ADDUSERDATA:
+    {
+        reqdata_type = TYPE_BOOLEAN;
+        if(read(from_parent, &returned_reqdata.boolean, sizeof(bool)) != sizeof(bool))
+            error("error reading bool");
         break;
     }
     case REQ_NOP:

@@ -1,11 +1,7 @@
+#pragma once
+
 #include "netcosm.h"
 #include "auth.h"
-
-/*
- * on-disk database for storing user data
- *
- * child processes MUST go through the master to use this
- */
 
 struct userdata_t {
     char username[MAX_NAME_LEN + 1];
@@ -16,7 +12,10 @@ struct userdata_t {
     char passhash[AUTH_HASHLEN * 2 + 1];
 
     int priv;
+    room_id room;
 };
+
+/*** functions for the master process ONLY ***/
 
 /* call before using anything else */
 void userdb_init(const char *dbfile);
@@ -42,3 +41,8 @@ void userdb_shutdown(void);
 
 /* save the DB to disk */
 void userdb_write(const char*);
+
+/*** child-only functions ***/
+struct userdata_t *userdb_request_lookup(const char *name);
+bool userdb_request_add(struct userdata_t *data);
+bool userdb_request_remove(const char *name);

@@ -21,6 +21,18 @@
 #define PORT 1234
 #define BACKLOG 16
 
+/* global data */
+bool are_child = false;
+void *child_map = NULL;
+
+/* assume int is atomic */
+volatile int num_clients = 0;
+
+/* local data */
+static uint16_t port;
+
+static int server_socket;
+
 void __attribute__((noreturn)) error(const char *fmt, ...)
 {
     char buf[128];
@@ -33,11 +45,6 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
     exit(EXIT_FAILURE);
 }
 
-/* assume int is atomic */
-volatile int num_clients = 0;
-void *child_map = NULL;
-static fd_set read_fds, active_fds;
-
 static void free_child_data(void *ptr)
 {
     struct child_data *child = ptr;
@@ -46,12 +53,8 @@ static void free_child_data(void *ptr)
     free(ptr);
 }
 
-static void sigchld_handler(int s, siginfo_t *info, void *vp)
+static void handle_disconnects(void)
 {
-    (void) s;
-    (void) info;
-    (void) vp;
-    // waitpid() might overwrite errno, so we save and restore it:
     int saved_errno = errno;
 
     pid_t pid;
@@ -59,7 +62,8 @@ static void sigchld_handler(int s, siginfo_t *info, void *vp)
     {
         sig_debugf("Client disconnect.\n");
         struct child_data *child = hash_lookup(child_map, &pid);
-        FD_CLR(child->readpipe[0], &active_fds);
+        ev_io_stop(child->loop, child->io_watcher);
+        free(child->io_watcher);
 
         --num_clients;
 
@@ -69,7 +73,11 @@ static void sigchld_handler(int s, siginfo_t *info, void *vp)
     errno = saved_errno;
 }
 
-int port;
+static void sigchld_handler(int s)
+{
+    (void) s;
+    handle_disconnects();
+}
 
 static void handle_client(int fd, struct sockaddr_in *addr,
                           int nclients, int to, int from)
@@ -77,9 +85,7 @@ static void handle_client(int fd, struct sockaddr_in *addr,
     client_main(fd, addr, nclients, to, from);
 }
 
-int server_socket;
-
-static void serv_cleanup(void)
+static void __attribute__((noreturn)) serv_cleanup(void)
 {
     sig_debugf("Shutdown server.\n");
 
@@ -93,26 +99,27 @@ static void serv_cleanup(void)
 
     hash_free(child_map);
     child_map = NULL;
+    ev_default_destroy();
 
     userdb_shutdown();
 
     _exit(0);
 }
 
-static void sigint_handler(int s)
+static void __attribute__((noreturn)) sigint_handler(int s)
 {
     (void) s;
     serv_cleanup();
 }
 
-void init_signals(void)
+static void init_signals(void)
 {
     struct sigaction sa;
 
     sigemptyset(&sa.sa_mask);
     sigaddset(&sa.sa_mask, SIGCHLD);
-    sa.sa_sigaction = sigchld_handler; // reap all dead processes
-    sa.sa_flags = SA_RESTART | SA_SIGINFO;
+    sa.sa_handler = sigchld_handler;
+    sa.sa_flags = SA_RESTART;
     if(sigaction(SIGCHLD, &sa, NULL) < 0)
         error("sigaction");
 
@@ -138,8 +145,6 @@ void init_signals(void)
     sa.sa_flags = SA_RESTART;
     if(sigaction(SIGPIPE, &sa, NULL) < 0)
         error("sigaction");
-
-    void sig_rt_0_handler(int s, siginfo_t *info, void *v);
 
     /* we set this now so there's no race condition after a fork() */
     sigemptyset(&sa.sa_mask);
@@ -205,6 +210,105 @@ static int server_bind(void)
 static SIMP_HASH(pid_t, pid_hash);
 static SIMP_EQUAL(pid_t, pid_equal);
 
+static void childreq_cb(EV_P_ ev_io *w, int revents)
+{
+    (void) EV_A;
+    (void) w;
+    (void) revents;
+    /* data from a child's pipe */
+    if(!handle_child_req(w->fd))
+    {
+        handle_disconnects();
+    }
+}
+
+static void new_connection_cb(EV_P_ ev_io *w, int revents)
+{
+    (void) EV_A;
+    (void) w;
+    (void) revents;
+    struct sockaddr_in client;
+    socklen_t client_len = sizeof(client);
+    int new_sock = accept(server_socket, (struct sockaddr*) &client, &client_len);
+    if(new_sock < 0)
+        error("accept");
+
+    ++num_clients;
+
+    int readpipe[2]; /* child->parent */
+    int outpipe [2]; /* parent->child */
+
+    if(pipe(readpipe) < 0)
+        error("pipe");
+    if(pipe(outpipe) < 0)
+        error("pipe");
+
+    int flags = fcntl(outpipe[0], F_GETFL, 0);
+    if(fcntl(outpipe[0], F_SETFL, flags | O_NONBLOCK) < 0)
+        error("fcntl");
+
+    pid_t pid = fork();
+    if(pid < 0)
+        error("fork");
+
+    if(!pid)
+    {
+        /* child */
+        are_child = true;
+        close(readpipe[0]);
+        close(outpipe[1]);
+        close(server_socket);
+
+        /* only the master process controls the world */
+        world_free();
+        reqmap_free();
+        hash_free(child_map);
+        child_map = NULL;
+
+        /* we don't need libev anymore */
+        ev_default_destroy();
+
+        /* user DB requests go through the master */
+        userdb_shutdown();
+
+        debugf("Child with PID %d spawned\n", getpid());
+
+        server_socket = new_sock;
+
+        handle_client(new_sock, &client, num_clients, readpipe[1], outpipe[0]);
+
+        exit(0);
+    }
+    else
+    {
+        /* parent */
+        close(readpipe[1]);
+        close(outpipe[0]);
+        close(new_sock);
+
+        /* add the child to the child map */
+        struct child_data *new = calloc(1, sizeof(struct child_data));
+        memcpy(new->outpipe, outpipe, sizeof(outpipe));
+        memcpy(new->readpipe, readpipe, sizeof(readpipe));
+        new->addr = client.sin_addr;
+        new->pid = pid;
+        new->state = STATE_INIT;
+        new->user = NULL;
+
+        ev_io *new_io_watcher = calloc(1, sizeof(ev_io));
+        ev_io_init(new_io_watcher, childreq_cb, new->readpipe[0], EV_READ);
+        ev_io_start(EV_A_ new_io_watcher);
+        new->io_watcher = new_io_watcher;
+
+        new->loop = loop;
+
+        pid_t *pidbuf = malloc(sizeof(pid_t));
+        *pidbuf = pid;
+
+        hash_insert(child_map, pidbuf, new);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     if(argc != 2)
@@ -215,11 +319,6 @@ int main(int argc, char *argv[])
     srand(time(0));
 
     server_socket = server_bind();
-
-    /* set up signal handlers */
-    /* SIGRTMIN+0 is used for broadcast signaling */
-    init_signals();
-
     userdb_init(USERFILE);
 
     check_userfile();
@@ -229,110 +328,23 @@ int main(int argc, char *argv[])
     reqmap_init();
 
     /* this initial size very low to make iteration faster */
-    child_map = hash_init(7, pid_hash, pid_equal);
+    child_map = hash_init(16, pid_hash, pid_equal);
     hash_setfreedata_cb(child_map, free_child_data);
     hash_setfreekey_cb(child_map, free);
 
     debugf("Listening on port %d\n", port);
 
-    FD_ZERO(&active_fds);
-    FD_SET(server_socket, &active_fds);
+    struct ev_loop *loop = ev_default_loop(0);
 
-    while(1)
-    {
-        read_fds = active_fds;
-        int num_events;
-        sigset_t all, old;
-        sigemptyset(&all);
-        sigaddset(&all, SIGPIPE);
-        sigprocmask(SIG_SETMASK, &all, &old);
-        do {
-            num_events = select(FD_SETSIZE, &read_fds, NULL, NULL, NULL);
-        } while (num_events < 0);
+    /* set up signal handlers AFTER creating the default loop, because it will grab SIGCHLD */
+    init_signals();
 
-        sigprocmask(SIG_SETMASK, &old, NULL);
-        //if(num_events < 0)
-        //    error("select");
+    ev_io server_watcher;
+    ev_io_init(&server_watcher, new_connection_cb, server_socket, EV_READ);
+    ev_io_start(EV_A_ &server_watcher);
 
-        for(int i = 0; i < FD_SETSIZE; ++i)
-        {
-            if(FD_ISSET(i, &read_fds))
-            {
-                if(server_socket == i)
-                {
-                    struct sockaddr_in client;
-                    socklen_t client_len = sizeof(client);
-                    int new_sock = accept(server_socket, (struct sockaddr*) &client, &client_len);
-                    if(new_sock < 0)
-                        error("accept");
+    ev_loop(loop, 0);
 
-                    ++num_clients;
-
-                    int readpipe[2]; /* child->parent */
-                    int outpipe [2]; /* parent->child */
-
-                    if(pipe(readpipe) < 0)
-                        error("pipe");
-                    if(pipe2(outpipe, O_NONBLOCK) < 0)
-                        error("pipe");
-
-                    pid_t pid = fork();
-                    if(pid < 0)
-                        error("fork");
-
-                    if(!pid)
-                    {
-                        /* child */
-                        close(readpipe[0]);
-                        close(outpipe[1]);
-                        close(server_socket);
-
-                        /* only the master process controls the world */
-                        world_free();
-                        reqmap_free();
-                        hash_free(child_map);
-                        child_map = NULL;
-
-                        /* user DB requests go through the master */
-                        userdb_shutdown();
-
-                        debugf("Child with PID %d spawned\n", getpid());
-
-                        server_socket = new_sock;
-
-                        handle_client(new_sock, &client, num_clients, readpipe[1], outpipe[0]);
-
-                        exit(0);
-                    }
-                    else
-                    {
-                        /* parent */
-                        close(readpipe[1]);
-                        close(outpipe[0]);
-                        close(new_sock);
-
-                        /* add the child to the child map */
-                        struct child_data *new = calloc(1, sizeof(struct child_data));
-                        memcpy(new->outpipe, outpipe, sizeof(outpipe));
-                        memcpy(new->readpipe, readpipe, sizeof(readpipe));
-                        FD_SET(new->readpipe[0], &active_fds);
-                        new->addr = client.sin_addr;
-                        new->pid = pid;
-                        new->state = STATE_INIT;
-                        new->user = NULL;
-
-                        pid_t *pidbuf = malloc(sizeof(pid_t));
-                        *pidbuf = pid;
-                        hash_insert(child_map, pidbuf, new);
-                    }
-                }
-                else
-                {
-                    /* data from a child's pipe */
-                    if(!handle_child_req(i))
-                        FD_CLR(i, &active_fds);
-                }
-            }
-        }
-    }
+    /* should never get here */
+    error("unexpected termination");
 }

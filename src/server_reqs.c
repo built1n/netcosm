@@ -46,9 +46,9 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
                  inet_ntoa(child->addr), child->pid, state[child->state]);
 
     if(sender->pid == child->pid)
-        strncat(buf, " [YOU]\n", sizeof(buf));
+        strncat(buf, " [YOU]\n", sizeof(buf) - 1);
     else
-        strncat(buf, "\n", sizeof(buf));
+        strncat(buf, "\n", sizeof(buf) - 1);
 
     write(sender->outpipe[1], buf, strlen(buf));
 }
@@ -165,13 +165,6 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
         status = false;
     }
     write(sender->outpipe[1], &status, sizeof(status));
-}
-
-static void send_string(int fd, const char *s)
-{
-    size_t len = strlen(s);
-    write(fd, &len, sizeof(len));
-    write(fd, s, len);
 }
 
 static void req_send_user(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -417,9 +410,17 @@ finish:
     else
         sig_debugf("Unknown PID sent request.\n");
 
+    /* 5 ms */
+#define ACK_TIMEOUT 5000
+
+    struct timespec timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_nsec = ACK_TIMEOUT;
+
     while(num_acks_recvd < MIN(num_clients,num_acks_wanted))
     {
-        sigsuspend(&old);
+        if(sigtimedwait(&old, NULL, &timeout) < 0 && errno == EAGAIN)
+            break;
     }
 
     inc_acks = 0;

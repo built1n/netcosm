@@ -18,7 +18,7 @@
 
 #include "netcosm.h"
 
-void telnet_handle_command(const unsigned char *buf)
+int telnet_handle_command(const unsigned char *buf)
 {
     bool cmd = false;
 
@@ -58,7 +58,7 @@ void telnet_handle_command(const unsigned char *buf)
         switch(c)
         {
         case IP:
-            exit(0);
+            return TELNET_EXIT;
         default:
             break;
         }
@@ -70,6 +70,8 @@ void telnet_handle_command(const unsigned char *buf)
 
     if(cmd)
         debugf("\n");
+
+    return TELNET_OK;
 }
 
 void telnet_echo_off(void)

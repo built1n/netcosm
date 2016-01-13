@@ -16,6 +16,8 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
 /* commands */
 #define IAC  255
 #define DONT 254
@@ -39,6 +41,12 @@
 #define LINEMODE 34
 
 void telnet_init(void);
-void telnet_handle_command(const unsigned char*);
+
+#define TELNET_OK 0
+#define TELNET_EXIT 1
+
+/* returns either 0 or TELNET_EXIT */
+int telnet_handle_command(const unsigned char*);
+
 void telnet_echo_on(void);
 void telnet_echo_off(void);

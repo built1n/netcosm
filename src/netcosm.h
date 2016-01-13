@@ -16,16 +16,18 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NC_H_
-#define _NC_H_
+/* You should use #pragma once everywhere. */
+#pragma once
 
-#define _GNU_SOURCE /* for pipe2() */
+#define _GNU_SOURCE
+
+#include <ev.h>
+#include <gcrypt.h>
 
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <gcrypt.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -48,9 +50,9 @@
 #define WORLDFILE "world.dat"
 #define WORLD_MAGIC 0xff467777
 #define MAX_FAILURES 3
-#define NETCOSM_VERSION "v0.1"
+#define NETCOSM_VERSION "0.2"
 
-#define MAX_NAME_LEN 20
+#define MAX_NAME_LEN 32
 
 #define PRIV_NONE -1
 #define PRIV_USER 0
@@ -70,6 +72,7 @@
 #define NONE_IN NULL
 #define NONE_OT NULL
 
+/* needs to be less than PIPE_BUF, which is 4096 */
 #define MSG_MAX 2048
 
 #define ARRAYLEN(x) (sizeof(x)/sizeof(x[0]))
@@ -77,7 +80,7 @@
 #define MIN(a,b) ((a<b)?(a):(b))
 
 #ifndef NDEBUG
-#define debugf(fmt,...) debugf_real(fmt, ##__VA_ARGS__)
+#define debugf(fmt,...) debugf_real(__func__, __LINE__, __FILE__, fmt, ##__VA_ARGS__)
 #define sig_debugf debugf
 #else
 #define debugf(fmt,...)
@@ -152,12 +155,12 @@ struct child_data {
     room_id room;
     char *user;
 
+    ev_io *io_watcher;
+    ev_child *sigchld_watcher;
+    struct ev_loop *loop;
+
     struct in_addr addr;
 };
-
-extern const struct roomdata_t netcosm_world[];
-extern const size_t netcosm_world_sz;
-extern const char *netcosm_world_name;
 
 #include "auth.h"
 #include "hash.h"
@@ -165,8 +168,21 @@ extern const char *netcosm_world_name;
 #include "telnet.h"
 #include "userdb.h"
 
+/* globals */
+extern const struct roomdata_t netcosm_world[];
+extern const size_t netcosm_world_sz;
+extern const char *netcosm_world_name;
+
 extern volatile int num_clients;
 extern void *child_map;
+
+extern enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN } reqdata_type;
+extern union reqdata_t {
+    struct userdata_t userdata;
+    bool boolean;
+} returned_reqdata;
+
+extern bool are_child;
 
 /* called for every client */
 void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);
@@ -187,17 +203,12 @@ void world_free(void);
 
 /* utility functions */
 void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
-void debugf_real(const char *fmt, ...);
+void debugf_real(const char*, int, const char*, const char *fmt, ...);
 void remove_cruft(char*);
-
-extern enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN } reqdata_type;
-extern union reqdata_t {
-    struct userdata_t userdata;
-    bool boolean;
-} returned_reqdata;
-
+void all_upper(char*);
 
 /* call from child process ONLY */
 void send_master(unsigned char cmd, const void *data, size_t sz);
 
-#endif
+/* the master sends the child SIGRTMIN+0 */
+void sig_rt_0_handler(int s, siginfo_t *info, void *v);

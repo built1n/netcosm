@@ -102,6 +102,8 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
     sigprocmask(SIG_SETMASK, &old, NULL);
 
     while(!request_complete) usleep(1);
+
+    free(req);
 }
 
 #define BUFSZ 128
@@ -119,9 +121,11 @@ tryagain:
     buf[BUFSZ - 1] = '\0';
     if(buf[0] & 0x80)
     {
-        telnet_handle_command((unsigned char*)buf);
+        int ret = telnet_handle_command((unsigned char*)buf);
 
         free(buf);
+        if(ret == TELNET_EXIT)
+            exit(0);
         goto tryagain;
     }
 
@@ -140,15 +144,6 @@ char *client_read_password(void)
     return ret;
 }
 
-void all_upper(char *s)
-{
-    while(*s)
-    {
-        *s = toupper(*s);
-        s++;
-    }
-}
-
 static void print_all(int fd)
 {
     unsigned char buf[MSG_MAX + 1];
@@ -160,9 +155,6 @@ static void print_all(int fd)
         out_raw(buf, len);
     } while(1);
 }
-
-struct userdata_t sent_userdata;
-bool child_req_success;
 
 enum reqdata_typespec reqdata_type = TYPE_NONE;
 union reqdata_t returned_reqdata;

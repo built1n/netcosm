@@ -16,8 +16,7 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _AUTH_H_
-#define _AUTH_H_
+#pragma once
 
 #define SALT_LEN 12
 #define ALGO GCRY_MD_SHA512
@@ -42,5 +41,3 @@ bool auth_user_del(const char *user);
 
 /* lists users through out() */
 void auth_user_list(void);
-
-#endif

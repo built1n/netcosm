@@ -19,6 +19,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#pragma once
+
 /* simple, generic chained hash map implementation */
 
 unsigned hash_djb(const void*);
@@ -63,7 +65,7 @@ void *hash_iterate(void *map, void **saved, void **keyptr);
 struct hash_pair {
     void *key;
     unsigned char value[0];
-};
+} __attribute__((packed));
 
 /* insert n key->pair members of size pairsize */
 void hash_insert_pairs(void*, const struct hash_pair*, size_t pairsize, size_t n);
@@ -71,14 +73,16 @@ void hash_insert_pairs(void*, const struct hash_pair*, size_t pairsize, size_t n
 /* gets the original pointer used to store the tuple */
 void *hash_getkeyptr(void*, const void *key);
 
-#define SIMP_HASH(TYPE, NAME)       \
-    unsigned NAME (const void *key) \
-    {                               \
-        return *((TYPE*)key);        \
+#define SIMP_HASH(TYPE, NAME)                  \
+    unsigned NAME (const void *key)            \
+    {                                          \
+        return (unsigned)*((const TYPE*)key);  \
     }
 
 #define SIMP_EQUAL(TYPE, NAME)                                          \
     int NAME (const void *a, const void *b)                             \
     {                                                                   \
-        return !(*((TYPE*)a) == *((TYPE*)b));                           \
+        return !(*((const TYPE*)a) == *((const TYPE*)b));               \
     }
+
+size_t hash_size(void*);

@@ -183,6 +183,9 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
 
     /* find it in the user list */
     struct userdata_t *data = userdb_request_lookup(name);
+
+    free(name);
+
     char *salt = data->salt, *hash = data->passhash;
 
     if(data)

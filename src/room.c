@@ -153,6 +153,8 @@ void world_free(void)
 {
     if(world)
     {
+        if(world_name)
+            free(world_name);
         for(unsigned i = 0; i < world_sz; ++i)
         {
             room_free(world + i);

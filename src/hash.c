@@ -16,7 +16,7 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "hash.h"
+#include "netcosm.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +34,7 @@ struct hash_map {
     size_t table_sz;
     void (*free_key)(void *key);
     void (*free_data)(void *data);
+    size_t n_entries;
 };
 
 unsigned hash_djb(const void *ptr)
@@ -63,6 +64,7 @@ void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
     ret->table_sz = sz;
     ret->hash = hash_fn;
     ret->compare = compare_keys;
+    ret->n_entries = 0;
 
     return ret;
 }
@@ -81,6 +83,7 @@ void hash_setfreedata_cb(void *ptr, void (*cb)(void *data))
 
 void hash_free(void *ptr)
 {
+    sig_debugf("freeing map\n");
     if(ptr)
     {
         struct hash_map *map = ptr;
@@ -92,7 +95,10 @@ void hash_free(void *ptr)
                 struct hash_node *next = node->next;
 
                 if(map->free_data)
+                {
+                    debugf("freeing data\n");
                     map->free_data((void*)node->data);
+                }
                 if(map->free_key)
                     map->free_key((void*)node->key);
                 free(node);
@@ -172,6 +178,7 @@ void *hash_insert(void *ptr, const void *key, const void *data)
         map->table[hash] = new;
     else
         last->next = new;
+    ++map->n_entries;
 
     return NULL;
 }
@@ -223,6 +230,7 @@ bool hash_remove(void *ptr, const void *key)
                 map->free_key((void*)iter->key);
             if(map->free_data)
                 map->free_data((void*)iter->data);
+            --map->n_entries;
             free(iter);
             return true;
         }
@@ -247,4 +255,10 @@ void *hash_getkeyptr(void *ptr, const void *key)
         iter = iter->next;
     }
     return NULL;
+}
+
+size_t hash_size(void *ptr)
+{
+    struct hash_map *map = ptr;
+    return map->n_entries;
 }

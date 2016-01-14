@@ -105,10 +105,8 @@ struct userdata_t *userdb_add(struct userdata_t *data)
 
 void userdb_shutdown(void)
 {
-    debugf("shutting down userdb with %d entries\n", hash_size(map));
     if(map)
     {
-        debugf("shutting down userdb\n");
         hash_free(map);
         map = NULL;
     }

@@ -19,7 +19,7 @@
 #include "netcosm.h"
 
 #define PORT 1234
-#define BACKLOG 16
+#define BACKLOG 100
 
 /* global data */
 bool are_child = false;
@@ -49,7 +49,17 @@ static void free_child_data(void *ptr)
 {
     struct child_data *child = ptr;
     if(child->user)
+    {
         free(child->user);
+        child->user = NULL;
+    }
+    if(child->io_watcher)
+    {
+        ev_io_stop(child->loop, child->io_watcher);
+
+        free(child->io_watcher);
+        child->io_watcher = NULL;
+    }
     free(ptr);
 }
 
@@ -61,9 +71,7 @@ static void handle_disconnects(void)
     while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
         sig_debugf("Client disconnect.\n");
-        struct child_data *child = hash_lookup(child_map, &pid);
-        ev_io_stop(child->loop, child->io_watcher);
-        free(child->io_watcher);
+        //struct child_data *child = hash_lookup(child_map, &pid);
 
         --num_clients;
 
@@ -91,17 +99,21 @@ static void __attribute__((noreturn)) serv_cleanup(void)
 
     if(shutdown(server_socket, SHUT_RDWR) > 0)
         error("shutdown");
+
     close(server_socket);
 
     world_free();
-
     reqmap_free();
-
     hash_free(child_map);
     child_map = NULL;
-    ev_default_destroy();
 
     userdb_shutdown();
+
+    extern char *current_user;
+    if(current_user)
+        free(current_user);
+
+    ev_default_destroy();
 
     _exit(0);
 }
@@ -334,13 +346,14 @@ int main(int argc, char *argv[])
 
     debugf("Listening on port %d\n", port);
 
-    struct ev_loop *loop = ev_default_loop(0);
+    struct ev_loop *loop = EV_DEFAULT;
 
     /* set up signal handlers AFTER creating the default loop, because it will grab SIGCHLD */
     init_signals();
 
     ev_io server_watcher;
     ev_io_init(&server_watcher, new_connection_cb, server_socket, EV_READ);
+    //ev_set_priority(&server_watcher, EV_MAXPRI);
     ev_io_start(EV_A_ &server_watcher);
 
     ev_loop(loop, 0);

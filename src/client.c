@@ -26,6 +26,8 @@ static room_id current_room = 0;
 
 static volatile sig_atomic_t output_locked = 0;
 
+char *current_user = NULL;
+
 void out_raw(const unsigned char *buf, size_t len)
 {
 try_again:
@@ -374,8 +376,6 @@ auth:
     int failures = 0;
 
     int authlevel;
-
-    char *current_user;
     struct userdata_t *current_data = NULL;
 
     client_change_state(STATE_AUTH);
@@ -409,6 +409,7 @@ auth:
         {
             client_change_state(STATE_FAILED);
             free(current_user);
+            current_user = NULL;
             out("Access Denied.\n\n");
             if(++failures >= MAX_FAILURES)
                 return;
@@ -550,10 +551,16 @@ auth:
                         /* weird pointer voodoo */
                         /* TODO: simplify */
                         char pidbuf[MAX(sizeof(pid_t), MSG_MAX)];
-                        pid_t pid = strtol(pid_s, NULL, 0);
+                        char *end;
+                        pid_t pid = strtol(pid_s, &end, 0);
                         if(pid == getpid())
                         {
                             out("You cannot kick yourself. Use EXIT instead.\n");
+                            goto next_cmd;
+                        }
+                        else if(*end != '\0')
+                        {
+                            out("Expected a child PID after KICK.\n");
                             goto next_cmd;
                         }
                         memcpy(pidbuf, &pid, sizeof(pid));
@@ -624,4 +631,5 @@ auth:
 
 done:
     free(current_user);
+    current_user = NULL;
 }

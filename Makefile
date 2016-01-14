@@ -5,7 +5,7 @@ PLATFORM = unix
 NETCOSM_SRC = $(shell cat SOURCES)
 NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
-CFLAGS = -O3 -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow -std=gnu99
+CFLAGS = -O3 -g -I src/ -I target/$(PLATFORM) -Wall -Wextra -Wshadow -std=gnu99 -fno-strict-aliasing
 LDFLAGS = -lgcrypt -lev
 
 HEADERS = src/netcosm.h src/hash.h src/telnet.h src/userdb.h

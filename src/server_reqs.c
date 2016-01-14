@@ -210,6 +210,15 @@ static void req_add_user(unsigned char *data, size_t datalen, struct child_data 
     write(sender->outpipe[1], &success, sizeof(success));
 }
 
+static void req_send_geninfo(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) data;
+    (void) datalen;
+    char buf[128];
+    int len = snprintf(buf, sizeof(buf), "Total clients: %d\n", num_clients);
+    write(sender->outpipe[1], buf, len);
+}
+
 static const struct child_request {
     unsigned char code;
 
@@ -229,7 +238,7 @@ static const struct child_request {
 } requests[] = {
     { REQ_NOP,         false, CHILD_NONE,           NULL,                NULL,              REQ_NOP         },
     { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL,              REQ_BCASTMSG    },
-    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, NULL,              REQ_BCASTMSG    },
+    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_send_geninfo,  REQ_BCASTMSG    },
     { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              REQ_NOP         },
     { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              REQ_NOP         },
     { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP         },

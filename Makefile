@@ -1,4 +1,4 @@
-CC = clang
+CC = cc
 OUT = build
 PLATFORM = unix
 
@@ -6,7 +6,7 @@ NETCOSM_SRC = $(shell cat SOURCES)
 NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
 CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
-	-std=gnu99 -fno-strict-aliasing
+	-std=c99 -fno-strict-aliasing
 LDFLAGS = -lgcrypt -lev
 
 HEADERS = src/*.h export/include/*.h

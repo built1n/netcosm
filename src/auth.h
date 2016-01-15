@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "globals.h"
+
 #define SALT_LEN 12
 #define ALGO GCRY_MD_SHA512
 #define AUTH_HASHLEN (512/8)

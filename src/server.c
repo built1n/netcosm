@@ -16,7 +16,13 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "netcosm.h"
+#include "globals.h"
+
+#include "client.h"
+#include "hash.h"
+#include "server.h"
+#include "userdb.h"
+#include "util.h"
 
 #define PORT 1234
 #define BACKLOG 100
@@ -96,6 +102,21 @@ static void handle_client(int fd, struct sockaddr_in *addr,
 static void __attribute__((noreturn)) serv_cleanup(void)
 {
     sig_debugf("Shutdown server.\n");
+
+    /* kill all our children (usually init claims them and wait()'s
+       for them, but not always) */
+    struct sigaction sa;
+    sigfillset(&sa.sa_mask); sigaddset(&sa.sa_mask, SIGCHLD);
+    sigaction(SIGCHLD, &sa, NULL); /* kill all children */
+    void *ptr = child_map, *save;
+    do {
+        struct child_data *child = hash_iterate(ptr, &save, NULL);
+        if(!child)
+            break;
+        ptr = NULL;
+        kill(child->pid, SIGKILL);
+    } while(1);
+    handle_disconnects();
 
     if(shutdown(server_socket, SHUT_RDWR) > 0)
         error("shutdown");
@@ -179,6 +200,10 @@ static void check_userfile(void)
 
 static void load_worldfile(void)
 {
+    extern const struct roomdata_t netcosm_world[];
+    extern const size_t netcosm_world_sz;
+    extern const char *netcosm_world_name;
+
     if(access(WORLDFILE, F_OK) < 0)
     {
         world_init(netcosm_world, netcosm_world_sz, netcosm_world_name);
@@ -323,6 +348,9 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
 
 int main(int argc, char *argv[])
 {
+    assert(ev_version_major() == EV_VERSION_MAJOR &&
+           ev_version_minor() >= EV_VERSION_MINOR);
+
     if(argc != 2)
         port = PORT;
     else
@@ -353,7 +381,7 @@ int main(int argc, char *argv[])
 
     ev_io server_watcher;
     ev_io_init(&server_watcher, new_connection_cb, server_socket, EV_READ);
-    //ev_set_priority(&server_watcher, EV_MAXPRI);
+    ev_set_priority(&server_watcher, EV_MAXPRI);
     ev_io_start(EV_A_ &server_watcher);
 
     ev_loop(loop, 0);

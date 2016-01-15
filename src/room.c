@@ -16,7 +16,11 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "netcosm.h"
+#include "globals.h"
+
+#include "hash.h"
+#include "server.h"
+#include "room.h"
 
 /* processed world data */
 static struct room_t *world;

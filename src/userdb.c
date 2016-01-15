@@ -1,4 +1,9 @@
-#include "netcosm.h"
+#include "globals.h"
+
+#include "client.h"
+#include "hash.h"
+#include "server.h"
+#include "userdb.h"
 
 static void *map = NULL;
 static char *db_file = NULL;

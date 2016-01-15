@@ -16,30 +16,30 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* You should use #pragma once everywhere. */
 #pragma once
 
-#define SALT_LEN 12
-#define ALGO GCRY_MD_SHA512
-#define AUTH_HASHLEN (512/8)
-//#define HASH_ITERS 500000
-#define HASH_ITERS 1
+#include "room.h"
+#include "userdb.h"
 
-struct authinfo_t {
-    bool success;
-    const char *user;
-    int authlevel;
+enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN } reqdata_type;
+
+union reqdata_t {
+    struct userdata_t userdata;
+    bool boolean;
 };
 
-/* makes admin account */
-void first_run_setup(void);
+extern enum reqdata_typespec reqdata_type;
+extern union reqdata_t returned_reqdata;
 
-struct userdata_t;
+/* call from child process ONLY */
+void send_master(unsigned char cmd, const void *data, size_t sz);
 
-/* NULL on failure, user data struct on success */
-struct userdata_t *auth_check(const char *user, const char *pass);
+/* the master sends the child SIGRTMIN+0 */
+void sig_rt_0_handler(int s, siginfo_t *info, void *v);
 
-bool auth_user_add(const char *user, const char *pass, int authlevel);
-bool auth_user_del(const char *user);
+void out(const char *fmt, ...) __attribute__((format(printf,1,2)));
+void out_raw(const unsigned char*, size_t);
 
-/* lists users through out() */
-void auth_user_list(void);
+/* called for every client */
+void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);

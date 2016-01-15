@@ -16,30 +16,11 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* You should use #pragma once everywhere. */
 #pragma once
 
-#define SALT_LEN 12
-#define ALGO GCRY_MD_SHA512
-#define AUTH_HASHLEN (512/8)
-//#define HASH_ITERS 500000
-#define HASH_ITERS 1
-
-struct authinfo_t {
-    bool success;
-    const char *user;
-    int authlevel;
-};
-
-/* makes admin account */
-void first_run_setup(void);
-
-struct userdata_t;
-
-/* NULL on failure, user data struct on success */
-struct userdata_t *auth_check(const char *user, const char *pass);
-
-bool auth_user_add(const char *user, const char *pass, int authlevel);
-bool auth_user_del(const char *user);
-
-/* lists users through out() */
-void auth_user_list(void);
+/* utility functions */
+void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
+void debugf_real(const char*, int, const char*, const char *fmt, ...);
+void remove_cruft(char*);
+void all_upper(char*);

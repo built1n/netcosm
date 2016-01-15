@@ -16,7 +16,7 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "netcosm.h"
+#include "hash.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -83,7 +83,6 @@ void hash_setfreedata_cb(void *ptr, void (*cb)(void *data))
 
 void hash_free(void *ptr)
 {
-    sig_debugf("freeing map\n");
     if(ptr)
     {
         struct hash_map *map = ptr;
@@ -95,10 +94,7 @@ void hash_free(void *ptr)
                 struct hash_node *next = node->next;
 
                 if(map->free_data)
-                {
-                    debugf("freeing data\n");
                     map->free_data((void*)node->data);
-                }
                 if(map->free_key)
                     map->free_key((void*)node->key);
                 free(node);

@@ -1,4 +1,8 @@
-#include "netcosm.h"
+#include "globals.h"
+
+#include "hash.h"
+#include "server.h"
+#include "userdb.h"
 
 static volatile sig_atomic_t num_acks_wanted, num_acks_recvd, inc_acks = 0;
 

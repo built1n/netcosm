@@ -16,7 +16,15 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "netcosm.h"
+#include "globals.h"
+
+#include "auth.h"
+#include "client.h"
+#include "hash.h"
+#include "server.h"
+#include "room.h"
+#include "telnet.h"
+#include "util.h"
 
 static bool admin = false;
 
@@ -178,6 +186,9 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     (void) s;
     (void) v;
 
+    if(!are_child)
+        return;
+
     /* we only listen to requests from our parent */
     if(info->si_pid != getppid())
     {
@@ -212,6 +223,7 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         returned_reqdata.boolean = status;
         if(!status)
             out("Cannot go that way.\n");
+        break;
     }
     case REQ_GETUSERDATA:
     {

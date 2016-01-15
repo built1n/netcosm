@@ -1,7 +1,29 @@
+/*
+ *   NetCosm - a MUD server
+ *   Copyright (C) 2016 Franklin Wei
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
-#include "netcosm.h"
 #include "auth.h"
+#include "room.h"
+
+/*** functions for the master process ONLY ***/
+
+typedef enum priv_t { PRIV_NONE = -1, PRIV_USER = 0, PRIV_ADMIN = 1337 } priv_t;
 
 struct userdata_t {
     char username[MAX_NAME_LEN + 1];
@@ -11,11 +33,9 @@ struct userdata_t {
     /* in hex + NULL terminator */
     char passhash[AUTH_HASHLEN * 2 + 1];
 
-    int priv;
+    priv_t priv;
     room_id room;
 };
-
-/*** functions for the master process ONLY ***/
 
 /* call before using anything else */
 void userdb_init(const char *dbfile);

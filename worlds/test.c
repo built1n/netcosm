@@ -1,4 +1,4 @@
-#include "netcosm.h"
+#include <world_api.h>
 
 const struct roomdata_t netcosm_world[] = {
     {

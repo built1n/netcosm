@@ -16,7 +16,11 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "netcosm.h"
+#include "globals.h"
+
+#include "auth.h"
+#include "client.h"
+#include "userdb.h"
 
 static bool valid_login_name(const char *name);
 

@@ -5,10 +5,11 @@ PLATFORM = unix
 NETCOSM_SRC = $(shell cat SOURCES)
 NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
-CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow -std=gnu99 -fno-strict-aliasing
+CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
+	-std=gnu99 -fno-strict-aliasing
 LDFLAGS = -lgcrypt -lev
 
-HEADERS = src/hash.h src/telnet.h src/userdb.h
+HEADERS = src/*.h export/include/*.h
 
 all: $(OUT)/$(PLATFORM).bin Makefile $(HEADERS)
 

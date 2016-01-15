@@ -210,7 +210,7 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     case REQ_KICK:
     {
         print_all(from_parent);
-        union sigval junk;
+        union sigval junk = { 0 };
         /* the master still expects an ACK */
         sigqueue(getppid(), SIGRTMIN+1, junk);
         exit(EXIT_SUCCESS);
@@ -269,14 +269,14 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     request_complete = 1;
 
     /* signal the master that we're done */
-    union sigval junk;
+    union sigval junk = { 0 };
     sigqueue(getppid(), SIGRTMIN+1, junk);
 }
 
 static void sigpipe_handler(int s)
 {
     (void) s;
-    union sigval junk;
+    union sigval junk = { 0 };
     /*
      * necessary in case we get SIGPIPE in our SIGRTMIN+1 handler,
      * the master expects a response from us

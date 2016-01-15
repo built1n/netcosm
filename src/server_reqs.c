@@ -36,7 +36,7 @@ static void req_pass_msg(unsigned char *data, size_t datalen,
     }
 
     write(child->outpipe[1], data, datalen);
-    union sigval nothing;
+    union sigval nothing = { 0 };
 
     if(sender->pid != child->pid)
     {
@@ -119,7 +119,7 @@ static void req_kick_client(unsigned char *data, size_t datalen,
             unsigned char cmd = REQ_KICK;
             write(child->outpipe[1], &cmd, 1);
             write(child->outpipe[1], data + sizeof(pid_t), datalen - sizeof(pid_t));
-            union sigval nothing;
+            union sigval nothing = { 0 };
             sigqueue(child->pid, SIGRTMIN, nothing);
         }
     }
@@ -435,7 +435,7 @@ finish:
     if(req && req->finalize)
         req->finalize(data, datalen, sender);
 
-    union sigval junk;
+    union sigval junk = { 0 };
     if(sender)
         sigqueue(sender->pid, SIGRTMIN, junk);
     else

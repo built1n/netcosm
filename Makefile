@@ -1,4 +1,4 @@
-CC = gcc
+CC = clang
 OUT = build
 PLATFORM = unix
 
@@ -11,7 +11,7 @@ LDFLAGS = -lgcrypt -lev
 
 HEADERS = src/*.h export/include/*.h
 
-all: $(OUT)/$(PLATFORM).bin Makefile $(HEADERS)
+all: $(OUT)/$(PLATFORM).bin Makefile SOURCES $(HEADERS)
 
 $(OUT)/$(PLATFORM).bin: $(NETCOSM_OBJ) $(HEADERS) Makefile
 	@mkdir -p $(OUT)

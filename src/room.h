@@ -47,8 +47,9 @@ struct user_t {
 };
 
 struct object_t {
-    const char *class;
     obj_id id;
+    const char *class;
+    const char *name; /* no articles: "a", "an", "the" */
 };
 
 struct verb_t {
@@ -84,5 +85,7 @@ void world_save(const char *fname);
 struct room_t *room_get(room_id id);
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
+
+struct object_t *obj_new(void);
 
 void world_free(void);

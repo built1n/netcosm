@@ -8,10 +8,10 @@ features might drift out of existence without prior warning!
 
 ### Prerequisities:
 
-libgcrypt
-libev
-linux >= 3.4 (need "packet mode" pipes)
-glibc >= 2.9
+* libgcrypt
+* libev
+* linux >= 3.4 (need "packet mode" pipes)
+* glibc >= 2.9
 
 ### Compiling
 
@@ -21,17 +21,20 @@ This gives you the executable in `build/unix.bin`.
 
 ## Todo List
 
-World persistence (partial)
-Inventory
-Verbs
-Game scripting
-NPCs
+* World persistence (partial)
+* Inventory
+* Verbs
+* Game scripting
+* NPCs
 
 ## Internal Design
 
 A child process is spawned for every client that connects.  There are
 two pipes created for every child: a pipe for the child to write to,
 and a pipe for the master to write to.
+
+Both of these pipes are created in "packet mode" (see pipe(2)), and
+therefore require at least linux 3.4 and glibc 2.9.
 
 ### Child-Master Requests
 
@@ -41,7 +44,7 @@ data to it's pipe to the parent. The size of the request MUST be less
 than PIPE_BUF, which is 4096 on Linux. The format of the request is as
 follows:
 
-    | Child PID | Request Length | Request Code | Data (if any) |
+    | Child PID | Request Code | Data (if any) |
 
 The master polls child pipes for data, and processes any requests it
 finds. The master then writes it's data to the pipes of any children

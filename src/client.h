@@ -39,7 +39,7 @@ void send_master(unsigned char cmd, const void *data, size_t sz);
 void sig_rt_0_handler(int s, siginfo_t *info, void *v);
 
 void out(const char *fmt, ...) __attribute__((format(printf,1,2)));
-void out_raw(const unsigned char*, size_t);
+void out_raw(const void*, size_t);
 
 /* called for every client */
 void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);

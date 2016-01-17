@@ -114,7 +114,7 @@ static void __attribute__((noreturn)) serv_cleanup(void)
         if(!child)
             break;
         ptr = NULL;
-        kill(child->pid, SIGKILL);
+        //kill(child->pid, SIGKILL);
     } while(1);
     handle_disconnects();
 
@@ -275,14 +275,10 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
     int readpipe[2]; /* child->parent */
     int outpipe [2]; /* parent->child */
 
-    if(pipe(readpipe) < 0)
+    if(pipe2(readpipe, O_DIRECT) < 0)
         error("pipe");
-    if(pipe(outpipe) < 0)
+    if(pipe2(outpipe, O_NONBLOCK | O_DIRECT) < 0)
         error("pipe");
-
-    int flags = fcntl(outpipe[0], F_GETFL, 0);
-    if(fcntl(outpipe[0], F_SETFL, flags | O_NONBLOCK) < 0)
-        error("fcntl");
 
     pid_t pid = fork();
     if(pid < 0)
@@ -348,8 +344,13 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
 
 int main(int argc, char *argv[])
 {
+    debugf("*** Starting NetCosm "NETCOSM_VERSION" (libev %d.%d, libgcrypt "GCRYPT_VERSION") ***\n",
+           EV_VERSION_MAJOR, EV_VERSION_MINOR);
+
     assert(ev_version_major() == EV_VERSION_MAJOR &&
            ev_version_minor() >= EV_VERSION_MINOR);
+
+    assert(!strcmp(GCRYPT_VERSION, gcry_check_version(GCRYPT_VERSION)));
 
     if(argc != 2)
         port = PORT;

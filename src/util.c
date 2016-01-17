@@ -25,7 +25,7 @@ void remove_cruft(char *str)
 }
 
 /**
- * WARNING: not signal-safe
+ * WARNING: not signal-safe AT ALL
  * TODO: rewrite to avoid calling *printf()
  */
 void debugf_real(const char *func, int line, const char *file, const char *fmt, ...)
@@ -33,6 +33,11 @@ void debugf_real(const char *func, int line, const char *file, const char *fmt, 
     (void) func;
     (void) line;
     (void) file;
+    static int fd = -1;
+    if(fd < 0)
+        fd = open(LOGFILE, O_APPEND | O_WRONLY | O_CREAT, 0600);
+    if(fd < 0)
+        error("unknown");
     int len;
 #if 0
     char *prefix;
@@ -48,6 +53,8 @@ void debugf_real(const char *func, int line, const char *file, const char *fmt, 
     len = vasprintf(&buf, fmt, ap);
 
     write(STDOUT_FILENO, buf, len);
+    write(fd, buf, len);
+    fflush(fdopen(fd, "a"));
 
     free(buf);
 

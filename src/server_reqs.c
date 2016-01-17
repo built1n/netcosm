@@ -24,25 +24,26 @@
 
 static volatile sig_atomic_t num_acks_wanted, num_acks_recvd, inc_acks = 0;
 
+static void send_packet(struct child_data *child, unsigned char cmd,
+                        void *data, size_t datalen)
+{
+    unsigned char pkt[MSG_MAX];
+    pkt[0] = cmd;
+    if(datalen)
+        memcpy(pkt + 1, data, datalen);
+    write(child->outpipe[1], pkt, datalen + 1);
+}
+
 static void req_pass_msg(unsigned char *data, size_t datalen,
                          struct child_data *sender, struct child_data *child)
 {
     (void) sender;
 
-    if(sender->pid != child->pid)
-    {
-        unsigned char cmd = REQ_BCASTMSG;
-        write(child->outpipe[1], &cmd, 1);
-    }
+    send_packet(child, REQ_BCASTMSG, data, datalen);
 
-    write(child->outpipe[1], data, datalen);
     union sigval nothing = { 0 };
-
-    if(sender->pid != child->pid)
-    {
-        sigqueue(child->pid, SIGRTMIN, nothing);
-        ++num_acks_wanted;
-    }
+    sigqueue(child->pid, SIGRTMIN, nothing);
+    ++num_acks_wanted;
 }
 
 static void req_send_clientinfo(unsigned char *data, size_t datalen,
@@ -72,7 +73,7 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
     else
         strncat(buf, "\n", sizeof(buf) - 1);
 
-    write(sender->outpipe[1], buf, strlen(buf));
+    send_packet(sender, REQ_BCASTMSG, buf, strlen(buf));
 }
 
 static void req_change_state(unsigned char *data, size_t datalen,
@@ -86,9 +87,7 @@ static void req_change_state(unsigned char *data, size_t datalen,
     }
     else
     {
-        debugf("State data is of the wrong size\n");
-        for(size_t i = 0; i < datalen; ++i)
-            debugf("%02x\n", data[i]);
+        debugf("State data is of the wrong size %*s\n", datalen, data);
     }
 }
 
@@ -110,15 +109,14 @@ static void req_change_user(unsigned char *data, size_t datalen,
 static void req_kick_client(unsigned char *data, size_t datalen,
                             struct child_data *sender, struct child_data *child)
 {
+    /* format is | PID | Message | */
     (void) data; (void) datalen; (void) child; (void) sender;
     if(datalen >= sizeof(pid_t))
     {
         pid_t kicked_pid = *((pid_t*)data);
         if(kicked_pid == child->pid)
         {
-            unsigned char cmd = REQ_KICK;
-            write(child->outpipe[1], &cmd, 1);
-            write(child->outpipe[1], data + sizeof(pid_t), datalen - sizeof(pid_t));
+            send_packet(child, REQ_BCASTMSG, data + sizeof(pid_t), datalen - sizeof(pid_t));
             union sigval nothing = { 0 };
             sigqueue(child->pid, SIGRTMIN, nothing);
         }
@@ -135,20 +133,18 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
 {
     (void) data; (void) datalen; (void) sender;
     struct room_t *room = room_get(sender->room);
-    write(sender->outpipe[1], room->data.desc, strlen(room->data.desc) + 1);
+    send_packet(sender, REQ_BCASTMSG, room->data.desc, strlen(room->data.desc));
 
-    char newline = '\n';
-    write(sender->outpipe[1], &newline, 1);
+    send_packet(sender, REQ_PRINT_NL, NULL, 0);
 }
 
 static void req_send_roomname(unsigned char *data, size_t datalen, struct child_data *sender)
 {
     (void) data; (void) datalen; (void) sender;
     struct room_t *room = room_get(sender->room);
-    write(sender->outpipe[1], room->data.name, strlen(room->data.name) + 1);
+    send_packet(sender, REQ_BCASTMSG, room->data.name, strlen(room->data.name));
 
-    char newline = '\n';
-    write(sender->outpipe[1], &newline, 1);
+    send_packet(sender, REQ_PRINT_NL, NULL, 0);
 }
 
 static void child_set_room(struct child_data *child, room_id id)
@@ -186,7 +182,7 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
     {
         status = false;
     }
-    write(sender->outpipe[1], &status, sizeof(status));
+    send_packet(sender, REQ_MOVE, &status, sizeof(status));
 }
 
 static void req_send_user(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -197,19 +193,15 @@ static void req_send_user(unsigned char *data, size_t datalen, struct child_data
 
         if(user)
         {
-            bool confirm = true;
-            write(sender->outpipe[1], &confirm, sizeof(confirm));
-            write(sender->outpipe[1], user, sizeof(*user));
+            send_packet(sender, REQ_GETUSERDATA, user, sizeof(*user));
             return;
         }
 
+        sig_debugf("looking up user %s failed\n", data);
         sig_debugf("failure 2\n");
     }
 
     sig_debugf("failure 1\n");
-
-    bool fail = false;
-    write(sender->outpipe[1], &fail, sizeof(fail));
 }
 
 static void req_del_user(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -219,7 +211,7 @@ static void req_del_user(unsigned char *data, size_t datalen, struct child_data 
     {
         success = userdb_remove((char*)data);
     }
-    write(sender->outpipe[1], &success, sizeof(success));
+    send_packet(sender, REQ_DELUSERDATA, &success, sizeof(success));
 }
 
 static void req_add_user(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -229,7 +221,7 @@ static void req_add_user(unsigned char *data, size_t datalen, struct child_data 
     {
         success = userdb_add((struct userdata_t*)data);
     }
-    write(sender->outpipe[1], &success, sizeof(success));
+    send_packet(sender, REQ_ADDUSERDATA, &success, sizeof(success));
 }
 
 static void req_send_geninfo(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -238,7 +230,7 @@ static void req_send_geninfo(unsigned char *data, size_t datalen, struct child_d
     (void) datalen;
     char buf[128];
     int len = snprintf(buf, sizeof(buf), "Total clients: %d\n", num_clients);
-    write(sender->outpipe[1], buf, len);
+    send_packet(sender, REQ_BCASTMSG, buf, len);
 }
 
 static const struct child_request {
@@ -312,21 +304,13 @@ void reqmap_free(void)
 
 bool handle_child_req(int in_fd)
 {
+    unsigned char packet[MSG_MAX + 1];
+
+    ssize_t packet_len = read(in_fd, packet, MSG_MAX);
+
     pid_t sender_pid;
-
-    if(read(in_fd, &sender_pid, sizeof(sender_pid)) != sizeof(sender_pid))
-    {
-        sig_debugf("Couldn't get sender PID\n");
-        return false;
-    }
-
+    memcpy(&sender_pid, packet, sizeof(pid_t));
     sig_debugf("Got request from PID %d\n", sender_pid);
-
-    size_t msglen;
-    const struct child_request *req = NULL;
-    size_t datalen;
-
-    unsigned char cmd, msg[MSG_MAX + 1];
 
     struct child_data *sender = hash_lookup(child_map, &sender_pid);
 
@@ -336,44 +320,12 @@ bool handle_child_req(int in_fd)
         goto fail;
     }
 
-    if(read(in_fd, &msglen, sizeof(msglen)) != sizeof(msglen))
-    {
-        sig_debugf("Couldn't read message length, dropping.\n");
-        goto fail;
-    }
+    unsigned char cmd = packet[sizeof(pid_t)];
 
-    if(msglen < 1)
-    {
-        sig_debugf("message too short to be valid, ignoring.\n");
-        goto fail;
-    }
-    else if(msglen > MSG_MAX)
-    {
-        sig_debugf("message too long, ignoring.\n");
-        goto fail;
-    }
+    unsigned char *data = packet + sizeof(pid_t) + 1;
+    size_t datalen = packet_len - sizeof(pid_t) - 1;
 
-    unsigned char *msgptr = msg;
-    size_t have = 0;
-    while(have < msglen)
-    {
-        ssize_t ret = read(sender->readpipe[0], msgptr, msglen - have);
-        if(ret < 0)
-        {
-            sig_debugf("unexpected EOF\n");
-            goto fail;
-        }
-        msgptr += ret;
-        have += ret;
-    }
-
-    cmd = msg[0];
-    msg[MSG_MAX] = '\0';
-
-    unsigned char *data = msg + 1;
-
-    datalen = msglen - 1;
-    req = hash_lookup(request_map, &cmd);
+    struct child_request *req = hash_lookup(request_map, &cmd);
 
     sigset_t old, block;
 
@@ -390,8 +342,6 @@ bool handle_child_req(int in_fd)
         sig_debugf("Unknown request.\n");
         goto fail;
     }
-
-    write(sender->outpipe[1], &req->cmd_to_send, 1);
 
     switch(req->which)
     {
@@ -432,6 +382,11 @@ bool handle_child_req(int in_fd)
 
 finish:
 
+    //if(req)
+    //{
+    //    send_packet(sender, req->cmd_to_send, NULL, 0);
+    //}
+
     if(req && req->finalize)
         req->finalize(data, datalen, sender);
 
@@ -458,7 +413,6 @@ finish:
 
     sigprocmask(SIG_SETMASK, &old, NULL);
 
-    return true;
 fail:
     return true;
 }

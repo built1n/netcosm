@@ -10,7 +10,7 @@ features might drift out of existence without prior warning!
 
 libgcrypt
 libev
-linux >= 2.6.27
+linux >= 3.4 (need "packet mode" pipes)
 glibc >= 2.9
 
 ### Compiling

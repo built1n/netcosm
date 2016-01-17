@@ -36,9 +36,13 @@ static volatile sig_atomic_t output_locked = 0;
 
 char *current_user = NULL;
 
-void out_raw(const unsigned char *buf, size_t len)
+void out_raw(const void *buf, size_t len)
 {
+    if(!len)
+        return;
+
 try_again:
+
     while(output_locked);
 
     /* something weird happened and the value changed between the loop and here */
@@ -52,19 +56,58 @@ try_again:
         goto try_again;
 }
 
+#define WRAP_COLS 80
+
 void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
 {
-    char buf[128];
+    char buf[1024];
     memset(buf, 0, sizeof(buf));
     va_list ap;
     va_start(ap, fmt);
-    int len = vsnprintf(buf, sizeof(buf), fmt, ap);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    out_raw((unsigned char*)buf, len);
+
+    /* do some line wrapping */
+
+    int x = 0;
+
+    char word_buf[sizeof(buf)], *ptr = buf;
+
+    char newline = '\n';
+
+    int word_idx = 0;
+    while(1)
+    {
+        char c = *ptr++;
+        if(!c)
+            break;
+        word_buf[word_idx++] = c;
+        x++;
+        if(c == ' ' || c == '\n')
+        {
+            if(x >= WRAP_COLS - 1)
+            {
+                sig_debugf("Wrapping...\n");
+                out_raw(&newline, 1);
+                x = 0;
+            }
+            out_raw(word_buf, word_idx);
+            word_idx = 0;
+        }
+    }
+
+    if(x >= WRAP_COLS - 1)
+    {
+        sig_debugf("Wrapping...\n");
+        out_raw(&newline, 1);
+        x = 0;
+    }
+    out_raw(word_buf, word_idx);
 }
 
 static volatile sig_atomic_t request_complete;
 
+/* for rate-limiting */
 static int reqs_since_ts;
 static time_t ts = 0;
 
@@ -93,20 +136,22 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
     sigprocmask(SIG_BLOCK, &block, &old);
 
     pid_t our_pid = getpid();
-    size_t total_len = (data?sz:0) + 1;
 
     if(!data)
         sz = 0;
 
+    /* format of child->parent packets:
+     * | PID | CMD | DATA |
+     */
+
     /* pack it all into one write so it's atomic */
-    char *req = malloc(1 + sizeof(pid_t) + sizeof(size_t) + sz);
+    char *req = malloc(sizeof(pid_t) + 1 + sz);
 
     memcpy(req, &our_pid, sizeof(pid_t));
-    memcpy(req + sizeof(pid_t), &total_len, sizeof(size_t));
-    memcpy(req + sizeof(pid_t) + sizeof(size_t), &cmd, 1);
-    memcpy(req + sizeof(pid_t) + sizeof(size_t) + 1, data, sz);
+    memcpy(req + sizeof(pid_t), &cmd, 1);
+    memcpy(req + sizeof(pid_t) + 1, data, sz);
 
-    write(to_parent, req, 1 + sizeof(pid_t) + sizeof(size_t) + sz);
+    write(to_parent, req, 1 + sizeof(pid_t) + sz);
 
     sigsuspend(&old);
     sigprocmask(SIG_SETMASK, &old, NULL);
@@ -154,18 +199,6 @@ char *client_read_password(void)
     return ret;
 }
 
-static void print_all(int fd)
-{
-    unsigned char buf[MSG_MAX + 1];
-    do {
-        ssize_t len = read(fd, &buf, MSG_MAX);
-        if(len <= 0)
-            break;
-        buf[MSG_MAX] = '\0';
-        out_raw(buf, len);
-    } while(1);
-}
-
 enum reqdata_typespec reqdata_type = TYPE_NONE;
 union reqdata_t returned_reqdata;
 
@@ -189,6 +222,8 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     if(!are_child)
         return;
 
+    sig_debugf("Master process sends SIG\n");
+
     /* we only listen to requests from our parent */
     if(info->si_pid != getppid())
     {
@@ -196,74 +231,91 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         return;
     }
 
-    reqdata_type = TYPE_NONE;
-    unsigned char cmd;
-    read(from_parent, &cmd, 1);
 
-    switch(cmd)
+    reqdata_type = TYPE_NONE;
+
+    while(1)
     {
-    case REQ_BCASTMSG:
-    {
-        print_all(from_parent);
-        break;
-    }
-    case REQ_KICK:
-    {
-        print_all(from_parent);
-        union sigval junk = { 0 };
-        /* the master still expects an ACK */
-        sigqueue(getppid(), SIGRTMIN+1, junk);
-        exit(EXIT_SUCCESS);
-    }
-    case REQ_MOVE:
-    {
-        bool status;
-        read(from_parent, &status, sizeof(status));
-        reqdata_type = TYPE_BOOLEAN;
-        returned_reqdata.boolean = status;
-        if(!status)
-            out("Cannot go that way.\n");
-        break;
-    }
-    case REQ_GETUSERDATA:
-    {
-        sig_debugf("got user data\n");
-        bool success;
-        read(from_parent, &success, sizeof(success));
-        if(success)
-            reqdata_type = TYPE_USERDATA;
-        else
+        unsigned char packet[MSG_MAX + 1];
+        memset(packet, 0, sizeof(packet));
+        ssize_t packetlen = read(from_parent, packet, MSG_MAX);
+        sig_debugf("done reading data\n");
+        unsigned char *data = packet + 1;
+        size_t datalen = packetlen - 1;
+        packet[MSG_MAX] = '\0';
+
+        if(packetlen <= 0)
+            goto fail;
+
+        unsigned char cmd = packet[0];
+
+        sig_debugf("child got code %d\n", cmd);
+
+        switch(cmd)
         {
-            sig_debugf("failure\n");
+        case REQ_BCASTMSG:
+        {
+            out((char*)data, datalen);
             break;
         }
+        case REQ_KICK:
+        {
+            out((char*)data, datalen);
+            union sigval junk = { 0 };
+            /* the master still expects an ACK */
+            sigqueue(getppid(), SIGRTMIN+1, junk);
+            exit(EXIT_SUCCESS);
+        }
+        case REQ_MOVE:
+        {
+            bool status = *((bool*)data);
 
-        struct userdata_t *user = &returned_reqdata.userdata;
-        if(read(from_parent, user, sizeof(*user)) != sizeof(*user))
-            error("user data too short");
-        break;
-    }
-    case REQ_DELUSERDATA:
-    {
-        reqdata_type = TYPE_BOOLEAN;
-        if(read(from_parent, &returned_reqdata.boolean, sizeof(bool)) != sizeof(bool))
-            error("error reading bool");
-        break;
-    }
-    case REQ_ADDUSERDATA:
-    {
-        reqdata_type = TYPE_BOOLEAN;
-        if(read(from_parent, &returned_reqdata.boolean, sizeof(bool)) != sizeof(bool))
-            error("error reading bool");
-        break;
-    }
-    case REQ_NOP:
-        break;
-    default:
-        sig_debugf("WARNING: client process received unknown code %d\n", cmd);
-        break;
-    }
+            reqdata_type = TYPE_BOOLEAN;
+            returned_reqdata.boolean = status;
+            if(!status)
+                out("Cannot go that way.\n");
+            break;
+        }
+        case REQ_GETUSERDATA:
+        {
+            sig_debugf("got user data\n");
+            if(datalen == sizeof(struct userdata_t))
+                reqdata_type = TYPE_USERDATA;
+            else
+            {
+                sig_debugf("failure %d %d\n", datalen, sizeof(struct userdata_t));
+                break;
+            }
 
+            struct userdata_t *user = &returned_reqdata.userdata;
+            *user = *((struct userdata_t*)data);
+            break;
+        }
+        case REQ_DELUSERDATA:
+        {
+            reqdata_type = TYPE_BOOLEAN;
+            returned_reqdata.boolean = *((bool*)data);
+            break;
+        }
+        case REQ_ADDUSERDATA:
+        {
+            reqdata_type = TYPE_BOOLEAN;
+            returned_reqdata.boolean = *((bool*)data);
+            break;
+        }
+        case REQ_NOP:
+            break;
+        case REQ_PRINT_NL:
+        {
+            out("\n");
+            break;
+        }
+        default:
+            sig_debugf("WARNING: client process received unknown code %d\n", cmd);
+            break;
+        }
+    }
+fail:
     sig_debugf("Client finishes handling request.\n");
 
     request_complete = 1;

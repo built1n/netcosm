@@ -24,6 +24,11 @@ typedef enum obj_id { OBJ_NONE = -1 } obj_id;
 
 enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
 
+struct user_t {
+    struct child_data *data;
+    struct user_t *next;
+};
+
 /* the data we get from a world module */
 struct roomdata_t {
     /* the non-const pointers can be modified by the world module */
@@ -36,27 +41,30 @@ struct roomdata_t {
     const char * const adjacent[NUM_DIRECTIONS];
 
     void (* const hook_init)(room_id id);
-    void (* const hook_enter)(room_id room, pid_t player);
-    void (* const hook_say)(room_id room, pid_t player, const char *msg);
-    void (* const hook_leave)(room_id room, pid_t player);
-};
-
-struct user_t {
-    struct child_data *data;
-    struct user_t *next;
+    void (* const hook_enter)(room_id room, struct user_t *user);
+    void (* const hook_leave)(room_id room, struct user_t *user);
 };
 
 struct object_t {
     obj_id id;
     const char *class;
     const char *name; /* no articles: "a", "an", "the" */
+    bool proper; /* whether to use "the" in describing this object */
+
+    void *userdata;
+
+    void (*hook_serialize)(int fd, struct object_t*);
+    void (*hook_take)(struct object_t*, struct user_t *user);
+    void (*hook_drop)(struct object_t*, struct user_t *user);
+    void (*hook_use)(struct object_t*, struct user_t *user);
+    void (*hook_destroy)(struct object_t*);
 };
 
 struct verb_t {
     const char *name;
 
     /* toks is strtok_r's pointer */
-    void (*execute)(const char *toks);
+    void (*execute)(const char *toks, struct user_t *user);
 };
 
 struct room_t {

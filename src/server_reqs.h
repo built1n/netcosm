@@ -35,6 +35,7 @@
 #define REQ_GETUSERDATA       13 /* server: send user data; child: get user data */
 #define REQ_DELUSERDATA       14 /* server: delete user data; child: success/failure */
 #define REQ_ADDUSERDATA       15 /* server: insert user data; child: success/fail */
+#define REQ_PRINT_NL          16 /* child: print a newline */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */

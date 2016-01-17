@@ -58,6 +58,8 @@ static char *hash_pass_hex(const char *pass, const char *salt)
     char *ptr = hex;
     for(unsigned int i = 0; i < hash_len; ++i, ptr += 2)
         snprintf(ptr, 3, "%02x", hash[i]);
+    hex[hash_len * 2] = '\0';
+    sig_debugf("hash is %s\n", hex);
 
     gcry_free(hash);
 
@@ -194,6 +196,7 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
 
     if(data)
     {
+        sig_debugf("auth module: user %s found\n", name2);
         char *new_hash_hex = hash_pass_hex(pass, salt);
 
         memset(pass, 0, strlen(pass));
@@ -207,6 +210,8 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
         if(success)
             return data;
     }
+
+    sig_debugf("auth failure: username not found\n");
 
     /* failure */
     sleep(2);

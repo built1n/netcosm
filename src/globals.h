@@ -29,6 +29,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -55,6 +56,8 @@
 /* global constants */
 #define USERFILE "users.dat"
 #define WORLDFILE "world.dat"
+#define LOGFILE "netcosm.log"
+
 #define WORLD_MAGIC 0xff467777
 #define MAX_FAILURES 3
 #define NETCOSM_VERSION "0.2"
@@ -78,8 +81,7 @@
 
 #include "util.h"
 
-/* needs to be less than PIPE_BUF, which is 4096 */
-#define MSG_MAX 2048
+#define MSG_MAX PIPE_BUF
 #ifndef NDEBUG
 #define debugf(fmt,...) debugf_real(__func__, __LINE__, __FILE__, fmt, ##__VA_ARGS__)
 #define sig_debugf debugf

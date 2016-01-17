@@ -28,7 +28,6 @@ $(OUT)/$(PLATFORM).bin: $(NETCOSM_OBJ) $(HEADERS) Makefile
 # automatically generate dependency rules
 
 %.d : %.c
-	@echo "MKDEP $<"
 	@$(CC) $(CCFLAGS) -MF"$@" -MG -MM -MP -MT"$@" -MT"$(<:.c=.o)" "$<"
 
 # -MF  write the generated dependency rule to a file

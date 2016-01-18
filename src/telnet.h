@@ -46,7 +46,10 @@ void telnet_init(void);
 #define TELNET_EXIT 1
 
 /* returns either TELNET_OK or TELNET_EXIT */
-int telnet_handle_command(const unsigned char*);
+int telnet_handle_command(const unsigned char*, size_t);
+
+uint16_t telnet_get_width(void);
+uint16_t telnet_get_height(void);
 
 void telnet_echo_on(void);
 void telnet_echo_off(void);

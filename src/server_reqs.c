@@ -357,9 +357,7 @@ bool handle_child_req(int in_fd)
 finish:
 
     if(req)
-    {
         send_packet(sender, REQ_ALLDONE, NULL, 0);
-    }
 
     if(req && req->finalize)
         req->finalize(data, datalen, sender);

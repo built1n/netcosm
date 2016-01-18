@@ -46,7 +46,8 @@ int telnet_handle_command(const unsigned char *buf)
             {  ECHO,    "ECHO"    },
             {  SGA,     "SGA"     },
             {  STATUS,  "STATUS"  },
-            {  NAWS,    "NAWS"    }
+            {  NAWS,    "NAWS"    },
+            {  IP,      "IP"      },
         };
 
         for(unsigned int i = 0; i < ARRAYLEN(commands); ++i)
@@ -55,15 +56,10 @@ int telnet_handle_command(const unsigned char *buf)
             {
                 debugf("%s ", commands[i].name);
                 cmd = true;
+                if(c == IP)
+                    return TELNET_EXIT;
                 goto found;
             }
-        }
-        switch(c)
-        {
-        case IP:
-            return TELNET_EXIT;
-        default:
-            break;
         }
         debugf("???: %d ", c);
     found:

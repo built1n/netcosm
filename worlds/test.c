@@ -24,7 +24,7 @@ const struct roomdata_t netcosm_world[] = {
     {
         "beride_square_n_statue",
         "King Ajax IV Statue",
-        "Your path is blocked by an enormous bronze statue. A plaque on the pedestal reads,\n\nKing Ajax IV\n\n182 - 238 A.B.A.\nTo the south is the Beride Town Square.",
+        "Your path is blocked by an enormous bronze statue. A plaque on the pedestal reads,\n\nKing Ajax IV\n\n182 - 238 A.B.A.\n\nTo the south is the Beride Town Square.",
         { NONE_N, NONE_NE, NONE_E, NONE_SE, "world_start", NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
         NULL,
         NULL,

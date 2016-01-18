@@ -70,3 +70,30 @@ latency.
 
 * Telnet server implementation is not fully conforming
 * Initial account login time is bogus
+
+## Versioning Scheme
+
+Versions are numbered using the MAJOR.MINOR.BUGFIX scheme.
+
+Current stable is 0.3.0.
+
+Major versions mark major milestones (see below), minor versions mark
+incremental milestones and compatibility of data files, and bugfix
+versions mark major bugfixes that don't warrant a new major or minor
+number.
+
+### Roadmap
+
+#### 0.4.0
+
+* Object support
+* User inventory support
+
+#### 0.5.0
+
+* Verb support
+* World hooks/scripting
+
+#### 0.6.0
+
+* Dynamic world editing

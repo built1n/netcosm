@@ -58,9 +58,9 @@
 #define WORLDFILE "world.dat"
 #define LOGFILE "netcosm.log"
 
-#define WORLD_MAGIC 0xff467777
+#define WORLD_MAGIC 0x31415926
 #define MAX_FAILURES 3
-#define NETCOSM_VERSION "0.2"
+#define NETCOSM_VERSION "0.3.0"
 
 /* username length */
 #define MAX_NAME_LEN 32

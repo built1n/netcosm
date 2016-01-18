@@ -21,13 +21,26 @@
 #include "client.h"
 #include "telnet.h"
 
-int telnet_handle_command(const unsigned char *buf)
-{
-    bool cmd = false;
+static uint16_t term_width, term_height;
 
-    while(*buf)
+uint16_t telnet_get_width(void)
+{
+    return term_width;
+}
+
+uint16_t telnet_get_height(void)
+{
+    return term_height;
+}
+
+int telnet_handle_command(const unsigned char *buf, size_t buflen)
+{
+    bool found_cmd = false;
+    bool in_sb = false;
+
+    for(unsigned i = 0; i < buflen; ++i)
     {
-        unsigned char c = *buf;
+        unsigned char c = buf[i];
 
         const struct telnet_cmd {
             int val;
@@ -50,24 +63,49 @@ int telnet_handle_command(const unsigned char *buf)
             {  IP,      "IP"      },
         };
 
-        for(unsigned int i = 0; i < ARRAYLEN(commands); ++i)
+        for(unsigned int cmd_idx = 0; cmd_idx < ARRAYLEN(commands); ++cmd_idx)
         {
-            if(c == commands[i].val)
+            if(c == commands[cmd_idx].val)
             {
-                debugf("%s ", commands[i].name);
-                cmd = true;
-                if(c == IP)
+                debugf("%s ", commands[cmd_idx].name);
+                found_cmd = true;
+                switch(c)
+                {
+                case IP:
                     return TELNET_EXIT;
-                goto found;
+                case SB:
+                    in_sb = true;
+                    break;
+                case NAWS:
+                    if(in_sb)
+                    {
+                        /* read height/width */
+                        uint8_t bytes[4];
+                        int j = 0;
+                        while(j < 4 && i < buflen)
+                        {
+                            bytes[j++] = buf[++i];
+                            sig_debugf("read byte %d %d\n", buf[i], j);
+                            if(bytes[j - 1] == 255) /* 255 is doubled */
+                            {
+                                ++i;
+                            }
+                        }
+                        term_width = ntohs(*((uint16_t*)bytes));
+                        term_height = ntohs(*((uint16_t*)(bytes+2)));
+                        sig_debugf("term size: %dx%d\n", term_width, term_height);
+                    }
+                    break;
+                }
+                goto got_cmd;
             }
         }
         debugf("???: %d ", c);
-    found:
-
-        ++buf;
+    got_cmd:
+        ;
     }
 
-    if(cmd)
+    if(found_cmd)
         debugf("\n");
 
     return TELNET_OK;
@@ -96,13 +134,19 @@ void telnet_init(void)
     const unsigned char init_seq[] = {
         IAC, WONT, SGA,
         IAC, DONT, SGA,
-        IAC, WONT, NAWS,
-        IAC, DONT, NAWS,
+
+        IAC, DO, NAWS,
+
         IAC, WONT, STATUS,
         IAC, DONT, STATUS,
+
         IAC, DO,   ECHO,
         IAC, WONT, ECHO,
+
         IAC, DONT, LINEMODE,
     };
+    term_width = 80;
+    term_height = 24;
+
     out_raw(init_seq, ARRAYLEN(init_seq));
 }

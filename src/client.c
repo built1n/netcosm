@@ -36,6 +36,8 @@ static volatile sig_atomic_t output_locked = 0;
 
 char *current_user = NULL;
 
+void poll_requests(void);
+
 void out_raw(const void *buf, size_t len)
 {
     if(!len)
@@ -130,11 +132,6 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
 
     request_complete = 0;
 
-    sigset_t block, old;
-    sigemptyset(&block);
-    sigaddset(&block, SIGRTMIN);
-    sigprocmask(SIG_BLOCK, &block, &old);
-
     pid_t our_pid = getpid();
 
     if(!data)
@@ -153,10 +150,14 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
 
     write(to_parent, req, 1 + sizeof(pid_t) + sz);
 
-    sigsuspend(&old);
-    sigprocmask(SIG_SETMASK, &old, NULL);
+    /* poll till we get data */
+    struct pollfd pfd;
+    pfd.fd = from_parent;
+    pfd.events = POLLIN;
 
-    while(!request_complete) usleep(1);
+    poll(&pfd, 1, -1);
+
+    poll_requests();
 
     free(req);
 }
@@ -171,22 +172,53 @@ tryagain:
 
     buf = malloc(BUFSZ);
     memset(buf, 0, BUFSZ);
-    if(read(client_fd, buf, BUFSZ - 1) < 0)
-        error("lost connection");
-    buf[BUFSZ - 1] = '\0';
-    if(buf[0] & 0x80)
+
+    /* set of the client fd and the pipe from our parent */
+    struct pollfd fds[2];
+
+    /* order matters here: we first fulfill parent requests, then
+     * handle client data */
+
+    fds[0].fd = from_parent;
+    fds[0].events = POLLIN;
+
+    fds[1].fd = client_fd;
+    fds[1].events = POLLIN;
+
+    while(1)
     {
-        int ret = telnet_handle_command((unsigned char*)buf);
+        poll(fds, ARRAYLEN(fds), -1);
+        for(int i = 0; i < 2; ++i)
+        {
+            if(fds[i].revents == POLLIN)
+            {
+                if(fds[i].fd == from_parent)
+                {
+                    poll_requests();
+                }
+                else if(fds[i].fd == client_fd)
+                {
+                    if(read(client_fd, buf, BUFSZ - 1) < 0)
+                        error("lost connection");
 
-        free(buf);
-        if(ret == TELNET_EXIT)
-            exit(0);
-        goto tryagain;
+                    buf[BUFSZ - 1] = '\0';
+                    if(buf[0] & 0x80)
+                    {
+                        int ret = telnet_handle_command((unsigned char*)buf);
+
+                        free(buf);
+                        if(ret == TELNET_EXIT)
+                            exit(0);
+                        goto tryagain;
+                    }
+
+                    remove_cruft(buf);
+
+                    return buf;
+                }
+            }
+        }
     }
-
-    remove_cruft(buf);
-
-    return buf;
 }
 
 /* still not encrypted, but a bit more secure than echoing the password! */
@@ -214,23 +246,10 @@ void read_string_max(int fd, char *buf, size_t max)
     buf[max - 1] = '\0';
 }
 
-void sig_rt_0_handler(int s, siginfo_t *info, void *v)
+void poll_requests(void)
 {
-    (void) s;
-    (void) v;
-
     if(!are_child)
         return;
-
-    sig_debugf("Master process sends SIG\n");
-
-    /* we only listen to requests from our parent */
-    if(info->si_pid != getppid())
-    {
-        sig_debugf("Unknown PID sent SIGRTMIN+1\n");
-        return;
-    }
-
 
     reqdata_type = TYPE_NONE;
 
@@ -238,8 +257,9 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
     {
         unsigned char packet[MSG_MAX + 1];
         memset(packet, 0, sizeof(packet));
+
         ssize_t packetlen = read(from_parent, packet, MSG_MAX);
-        sig_debugf("done reading data\n");
+
         unsigned char *data = packet + 1;
         size_t datalen = packetlen - 1;
         packet[MSG_MAX] = '\0';
@@ -248,8 +268,6 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
             goto fail;
 
         unsigned char cmd = packet[0];
-
-        sig_debugf("child got code %d\n", cmd);
 
         switch(cmd)
         {
@@ -261,14 +279,11 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         case REQ_KICK:
         {
             out((char*)data, datalen);
-            union sigval junk = { 0 };
-            /* the master still expects an ACK */
-            sigqueue(getppid(), SIGRTMIN+1, junk);
             exit(EXIT_SUCCESS);
         }
         case REQ_MOVE:
         {
-            bool status = *((bool*)data);
+            int status = *((int*)data);
 
             reqdata_type = TYPE_BOOLEAN;
             returned_reqdata.boolean = status;
@@ -278,14 +293,10 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         }
         case REQ_GETUSERDATA:
         {
-            sig_debugf("got user data\n");
             if(datalen == sizeof(struct userdata_t))
                 reqdata_type = TYPE_USERDATA;
             else
-            {
-                sig_debugf("failure %d %d\n", datalen, sizeof(struct userdata_t));
                 break;
-            }
 
             struct userdata_t *user = &returned_reqdata.userdata;
             *user = *((struct userdata_t*)data);
@@ -316,25 +327,8 @@ void sig_rt_0_handler(int s, siginfo_t *info, void *v)
         }
     }
 fail:
-    sig_debugf("Client finishes handling request.\n");
 
     request_complete = 1;
-
-    /* signal the master that we're done */
-    union sigval junk = { 0 };
-    sigqueue(getppid(), SIGRTMIN+1, junk);
-}
-
-static void sigpipe_handler(int s)
-{
-    (void) s;
-    union sigval junk = { 0 };
-    /*
-     * necessary in case we get SIGPIPE in our SIGRTMIN+1 handler,
-     * the master expects a response from us
-     */
-    sigqueue(getppid(), SIGRTMIN+1, junk);
-    _exit(0);
 }
 
 void client_change_state(int state)
@@ -413,13 +407,6 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
     from_parent = from;
 
     output_locked = 0;
-
-    struct sigaction sa;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_handler = sigpipe_handler;
-    sa.sa_flags = SA_RESTART;
-    if(sigaction(SIGPIPE, &sa, NULL) < 0)
-        error("sigaction");
 
     telnet_init();
 

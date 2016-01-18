@@ -19,7 +19,7 @@
 /* child<->master commands */
 /* children might not implement all of these */
 /* meanings might be different for the server and child, see comments */
-#define REQ_NOP               0 /* server, child: do nothing */
+#define REQ_NOP               0 /* server, child: do nothing (used for acknowledgement) */
 #define REQ_BCASTMSG          1 /* server: broadcast text; child: print following text */
 #define REQ_LISTCLIENTS       2 /* server: list childs */
 #define REQ_CHANGESTATE       3 /* server: change child state flag */

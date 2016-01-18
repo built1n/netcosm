@@ -223,7 +223,7 @@ static SIMP_EQUAL(enum direction_t, dir_equal);
 /* loads room data (supplied by the world module) into our internal format */
 void world_init(const struct roomdata_t *data, size_t sz, const char *name)
 {
-    printf("Loading world with %lu rooms.\n", sz);
+    debugf("Loading world with %lu rooms.\n", sz);
     world = calloc(sz, sizeof(struct room_t));
     world_sz = 0;
     world_name = strdup(name);
@@ -239,10 +239,10 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
         //world[i].uniq_id = strdup(world[i].uniq_id);
         world[i].data.name = strdup(world[i].data.name);
         world[i].data.desc = strdup(world[i].data.desc);
-        printf("Loading room '%s'\n", world[i].data.uniq_id);
+        debugf("Loading room '%s'\n", world[i].data.uniq_id);
 
         if(hash_insert(map, world[i].data.uniq_id, world + i))
-            error("Duplicate room ID '%s'\n", world[i].data.uniq_id);
+            error("Duplicate room ID '%s'", world[i].data.uniq_id);
 
         for(int dir = 0; dir < NUM_DIRECTIONS; ++dir)
         {
@@ -314,7 +314,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
                 enum direction_t *opp = hash_lookup(dir_map, &j);
                 struct room_t *adj = room_get(world[i].adjacent[j]);
                 if(adj->adjacent[*opp] != i)
-                    printf("WARNING: Rooms '%s' and '%s' are one-way\n",
+                    debugf("WARNING: Rooms '%s' and '%s' are one-way\n",
                            world[i].data.uniq_id, adj->data.uniq_id);
             }
         }

@@ -156,7 +156,7 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
     room_user_del(sender->room, sender);
 
     /* TODO: checking */
-    sig_debugf("Moving in direction %d\n", dir);
+    debugf("Moving in direction %d\n", dir);
     room_id new = current->adjacent[dir];
     int status = 0;
     if(new != ROOM_NONE)
@@ -164,7 +164,7 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
         child_set_room(sender, new);
         status = 1;
     }
-    sig_debugf("server status: %d\n", status);
+    debugf("server status: %d\n", status);
 
     send_packet(sender, REQ_MOVE, &status, sizeof(status));
 }
@@ -181,11 +181,11 @@ static void req_send_user(unsigned char *data, size_t datalen, struct child_data
             return;
         }
 
-        sig_debugf("looking up user %s failed\n", data);
-        sig_debugf("failure 2\n");
+        debugf("looking up user %s failed\n", data);
+        debugf("failure 2\n");
     }
 
-    sig_debugf("failure 1\n");
+    debugf("failure 1\n");
 }
 
 static void req_del_user(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -300,7 +300,7 @@ bool handle_child_req(int in_fd)
 
     if(!sender)
     {
-        sig_debugf("WARNING: got data from unknown PID, ignoring.\n");
+        debugf("WARNING: got data from unknown PID, ignoring.\n");
         goto fail;
     }
 
@@ -313,7 +313,7 @@ bool handle_child_req(int in_fd)
 
     if(!req)
     {
-        sig_debugf("Unknown request.\n");
+        debugf("Unknown request.\n");
         goto fail;
     }
 

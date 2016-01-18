@@ -31,36 +31,33 @@ static char *hash_pass_hex(const char *pass, const char *salt)
 {
     size_t pass_len = strlen(pass);
 
-    char *salted = gcry_malloc_secure(pass_len + SALT_LEN + 1);
+    unsigned char *salted = malloc(pass_len + SALT_LEN + 1);
     memcpy(salted, salt, SALT_LEN);
     memcpy(salted + SALT_LEN, pass, pass_len);
     salted[pass_len + SALT_LEN] = '\0';
 
-    unsigned int hash_len = gcry_md_get_algo_dlen(ALGO);
-    unsigned char *hash = gcry_malloc_secure(hash_len);
+    unsigned char hash[AUTH_HASHLEN];
 
-    gcry_md_hash_buffer(ALGO, hash, salted, pass_len + SALT_LEN);
+    SHA512(salted, pass_len + SALT_LEN, hash);
 
-    unsigned char *tmp = gcry_malloc_secure(hash_len);
+    unsigned char tmp[AUTH_HASHLEN];
     /* now hash the hash half a million times to slow things down */
     for(int i = 0; i < HASH_ITERS - 1; ++i)
     {
-        memcpy(tmp, hash, hash_len);
-        gcry_md_hash_buffer(ALGO, hash, tmp, hash_len);
+        memcpy(tmp, hash, AUTH_HASHLEN);
+        AUTH_HASHFUNC(tmp, AUTH_HASHLEN, hash);
     }
-    gcry_free(tmp);
+    memset(tmp, 0, sizeof(tmp));
 
     memset(salted, 0, pass_len + SALT_LEN + 1);
-    gcry_free(salted);
+    free(salted);
 
     /* convert to hex */
-    char *hex = malloc(hash_len * 2 + 1);
+    char *hex = malloc(AUTH_HASHLEN * 2 + 1);
     char *ptr = hex;
-    for(unsigned int i = 0; i < hash_len; ++i, ptr += 2)
+    for(unsigned int i = 0; i < AUTH_HASHLEN; ++i, ptr += 2)
         snprintf(ptr, 3, "%02x", hash[i]);
-    hex[hash_len * 2] = '\0';
-
-    gcry_free(hash);
+    hex[AUTH_HASHLEN * 2] = '\0';
 
     return hex;
 }
@@ -86,6 +83,8 @@ static void add_user_internal(const char *name, const char *pass, int authlevel)
     free(hexhash);
 
     userdata.priv = authlevel;
+
+    userdata.last_login = time(0);
 
     memcpy(userdata.salt, salt, sizeof(salt));
 
@@ -121,7 +120,6 @@ bool auth_user_add(const char *user2, const char *pass2, int level)
         return false;
     }
 
-    /* add user to end of temp file */
     add_user_internal(user, pass, level);
 
     free(user);
@@ -196,10 +194,17 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
     if(data)
     {
         debugf("auth module: user %s found\n", name2);
-        char *new_hash_hex = hash_pass_hex(pass, salt);
 
         /* hashes are in HEX to avoid the Trucha bug */
-        bool success = !memcmp(new_hash_hex, hash, strlen(hash));
+        char *new_hash_hex = hash_pass_hex(pass, salt);
+
+        bool success = true;
+        /* constant-time comparison to a timing attack */
+        for(int i = 0; i < AUTH_HASHLEN; ++i)
+        {
+            if(new_hash_hex[i] != hash[i])
+                success = false;
+        }
 
         free(new_hash_hex);
 

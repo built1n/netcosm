@@ -20,7 +20,7 @@
 
 typedef enum room_id { ROOM_NONE = -1 } room_id;
 
-typedef enum obj_id { OBJ_NONE = -1 } obj_id;
+typedef unsigned __int128 obj_id;
 
 enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
 

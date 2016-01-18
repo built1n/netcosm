@@ -25,7 +25,7 @@
 #include "util.h"
 
 #define PORT 1234
-#define BACKLOG 100
+#define BACKLOG 512
 
 /* global data */
 bool are_child = false;
@@ -61,7 +61,7 @@ static void free_child_data(void *ptr)
     }
     if(child->io_watcher)
     {
-        ev_io_stop(child->loop, child->io_watcher);
+        ev_io_stop(EV_DEFAULT_ child->io_watcher);
 
         free(child->io_watcher);
         child->io_watcher = NULL;
@@ -87,10 +87,11 @@ static void handle_disconnects(void)
     errno = saved_errno;
 }
 
-static void sigchld_handler(int s)
+volatile sig_atomic_t reap_children = 0;
+
+static void sigchld_handler(int sig)
 {
-    (void) s;
-    handle_disconnects();
+    reap_children = 1;
 }
 
 static void handle_client(int fd, struct sockaddr_in *addr,
@@ -145,27 +146,6 @@ static void __attribute__((noreturn)) sigint_handler(int s)
 {
     (void) s;
     serv_cleanup();
-}
-
-static void init_signals(void)
-{
-    struct sigaction sa;
-
-    sigemptyset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, SIGCHLD);
-    sa.sa_handler = sigchld_handler;
-    sa.sa_flags = SA_RESTART;
-    if(sigaction(SIGCHLD, &sa, NULL) < 0)
-        error("sigaction");
-
-    sigemptyset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, SIGINT);
-    sa.sa_handler = sigint_handler;
-    sa.sa_flags = SA_RESTART;
-    if(sigaction(SIGINT, &sa, NULL) < 0)
-        error("sigaction");
-    if(sigaction(SIGTERM, &sa, NULL) < 0)
-        error("sigaction");
 }
 
 static void check_userfile(void)
@@ -230,6 +210,8 @@ static void childreq_cb(EV_P_ ev_io *w, int revents)
 {
     (void) EV_A;
     (void) w;
+    if(reap_children)
+        handle_disconnects();
     /* data from a child's pipe */
     if(revents & EV_READ)
     {
@@ -314,13 +296,41 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
         ev_io_start(EV_A_ new_io_watcher);
         new->io_watcher = new_io_watcher;
 
-        new->loop = loop;
-
         pid_t *pidbuf = malloc(sizeof(pid_t));
         *pidbuf = pid;
 
         hash_insert(child_map, pidbuf, new);
     }
+}
+
+static void init_signals(void)
+{
+    struct sigaction sa;
+
+    sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGINT);
+    sa.sa_handler = sigint_handler;
+    sa.sa_flags = SA_RESTART;
+    if(sigaction(SIGINT, &sa, NULL) < 0)
+        error("sigaction");
+    if(sigaction(SIGTERM, &sa, NULL) < 0)
+        error("sigaction");
+
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = SIG_IGN;
+    sa.sa_flags = 0;
+    if(sigaction(SIGPIPE, &sa, NULL) < 0)
+        error("sigaction");
+
+    /* libev's default SIGCHLD handler exhibits some really strange
+     * behavior, which we don't like, so we use our own ;) */
+
+    sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGCHLD);
+    sa.sa_handler = sigchld_handler;
+    sa.sa_flags = SA_RESTART;
+    if(sigaction(SIGCHLD, &sa, NULL) < 0)
+        error("sigaction");
 }
 
 int main(int argc, char *argv[])
@@ -358,7 +368,7 @@ int main(int argc, char *argv[])
 
     struct ev_loop *loop = EV_DEFAULT;
 
-    /* set up signal handlers AFTER creating the default loop, because it will grab SIGCHLD */
+    /* we initialize signals after creating the default event loop */
     init_signals();
 
     ev_io server_watcher;

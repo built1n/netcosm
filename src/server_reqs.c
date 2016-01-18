@@ -22,8 +22,6 @@
 #include "server.h"
 #include "userdb.h"
 
-static volatile sig_atomic_t num_acks_wanted, num_acks_recvd, inc_acks = 0;
-
 static void send_packet(struct child_data *child, unsigned char cmd,
                         void *data, size_t datalen)
 {
@@ -123,7 +121,7 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
     struct room_t *room = room_get(sender->room);
     send_packet(sender, REQ_BCASTMSG, room->data.desc, strlen(room->data.desc));
 
-    send_packet(sender, REQ_PRINT_NL, NULL, 0);
+    send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
 }
 
 static void req_send_roomname(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -132,7 +130,7 @@ static void req_send_roomname(unsigned char *data, size_t datalen, struct child_
     struct room_t *room = room_get(sender->room);
     send_packet(sender, REQ_BCASTMSG, room->data.name, strlen(room->data.name));
 
-    send_packet(sender, REQ_PRINT_NL, NULL, 0);
+    send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
 }
 
 static void child_set_room(struct child_data *child, room_id id)
@@ -232,25 +230,22 @@ static const struct child_request {
                          struct child_data *sender, struct child_data *child);
 
     void (*finalize)(unsigned char *data, size_t len, struct child_data *sender);
-
-    /* byte to write back to the sender */
-    unsigned char cmd_to_send;
 } requests[] = {
-    { REQ_NOP,         false, CHILD_NONE,           NULL,                NULL,              REQ_NOP         },
-    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL,              REQ_NOP         },
-    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_send_geninfo,  REQ_NOP         },
-    { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              REQ_NOP         },
-    { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              REQ_NOP         },
-    { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              REQ_NOP         },
-    { REQ_WAIT,        false, CHILD_NONE,           NULL,                req_wait,          REQ_NOP         },
-    { REQ_GETROOMDESC, false, CHILD_NONE,           NULL,                req_send_desc,     REQ_NOP         },
-    { REQ_GETROOMNAME, false, CHILD_NONE,           NULL,                req_send_roomname, REQ_NOP         },
-    { REQ_SETROOM,     true,  CHILD_NONE,           NULL,                req_set_room,      REQ_NOP         },
-    { REQ_MOVE,        true,  CHILD_NONE,           NULL,                req_move_room,     REQ_NOP         },
-    { REQ_GETUSERDATA, true,  CHILD_NONE,           NULL,                req_send_user,     REQ_NOP         },
-    { REQ_DELUSERDATA, true,  CHILD_NONE,           NULL,                req_del_user,      REQ_NOP         },
-    { REQ_ADDUSERDATA, true,  CHILD_NONE,           NULL,                req_add_user,      REQ_NOP         },
-    //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,              REQ_BCASTMSG },
+    { REQ_NOP,         false, CHILD_NONE,           NULL,                NULL,              },
+    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL,              },
+    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_send_geninfo,  },
+    { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              },
+    { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              },
+    { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              },
+    { REQ_WAIT,        false, CHILD_NONE,           NULL,                req_wait,          },
+    { REQ_GETROOMDESC, false, CHILD_NONE,           NULL,                req_send_desc,     },
+    { REQ_GETROOMNAME, false, CHILD_NONE,           NULL,                req_send_roomname, },
+    { REQ_SETROOM,     true,  CHILD_NONE,           NULL,                req_set_room,      },
+    { REQ_MOVE,        true,  CHILD_NONE,           NULL,                req_move_room,     },
+    { REQ_GETUSERDATA, true,  CHILD_NONE,           NULL,                req_send_user,     },
+    { REQ_DELUSERDATA, true,  CHILD_NONE,           NULL,                req_del_user,      },
+    { REQ_ADDUSERDATA, true,  CHILD_NONE,           NULL,                req_add_user,      },
+    //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,           },
 };
 
 static SIMP_HASH(unsigned char, uchar_hash);
@@ -363,7 +358,7 @@ finish:
 
     if(req)
     {
-        send_packet(sender, req->cmd_to_send, NULL, 0);
+        send_packet(sender, REQ_ALLDONE, NULL, 0);
     }
 
     if(req && req->finalize)

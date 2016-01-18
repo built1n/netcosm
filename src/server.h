@@ -37,7 +37,6 @@ struct child_data {
 
     ev_io *io_watcher;
     ev_child *sigchld_watcher;
-    struct ev_loop *loop;
 
     struct in_addr addr;
 };

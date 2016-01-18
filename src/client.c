@@ -36,7 +36,7 @@ static volatile sig_atomic_t output_locked = 0;
 
 char *current_user = NULL;
 
-void poll_requests(void);
+bool poll_requests(void);
 
 void out_raw(const void *buf, size_t len)
 {
@@ -157,7 +157,7 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
 
     poll(&pfd, 1, -1);
 
-    poll_requests();
+    while(poll_requests());
 
     free(req);
 }
@@ -246,12 +246,12 @@ void read_string_max(int fd, char *buf, size_t max)
     buf[max - 1] = '\0';
 }
 
-void poll_requests(void)
+bool poll_requests(void)
 {
     if(!are_child)
-        return;
+        return false;
 
-    reqdata_type = TYPE_NONE;
+    bool got_cmd = false;
 
     while(1)
     {
@@ -266,6 +266,8 @@ void poll_requests(void)
 
         if(packetlen <= 0)
             goto fail;
+
+        got_cmd = true;
 
         unsigned char cmd = packet[0];
 
@@ -316,11 +318,14 @@ void poll_requests(void)
         }
         case REQ_NOP:
             break;
-        case REQ_PRINT_NL:
+        case REQ_PRINTNEWLINE:
         {
             out("\n");
             break;
         }
+        case REQ_ALLDONE:
+            request_complete = 1;
+            break;
         default:
             sig_debugf("WARNING: client process received unknown code %d\n", cmd);
             break;
@@ -328,7 +333,7 @@ void poll_requests(void)
     }
 fail:
 
-    request_complete = 1;
+    return got_cmd;
 }
 
 void client_change_state(int state)

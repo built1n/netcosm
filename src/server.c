@@ -178,7 +178,7 @@ static void load_worldfile(void)
         error("cannot access "WORLDFILE);
     else
         if(!world_load(WORLDFILE, netcosm_world, netcosm_world_sz, netcosm_world_name))
-            error("Failed to load world from disk.\nTry removing "WORLDFILE".\n");
+            error("Failed to load world from disk.\nTry removing "WORLDFILE".");
 }
 
 static int server_bind(void)
@@ -383,5 +383,5 @@ int main(int argc, char *argv[])
     ev_loop(loop, 0);
 
     /* should never get here */
-    error("unexpected termination");
+    error("FIXME: unexpected termination");
 }

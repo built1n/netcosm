@@ -324,7 +324,7 @@ bool poll_requests(void)
             request_complete = 1;
             return true;
         default:
-            sig_debugf("WARNING: client process received unknown code %d\n", cmd);
+            debugf("WARNING: client process received unknown code %d\n", cmd);
             break;
         }
     }

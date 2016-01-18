@@ -76,7 +76,7 @@ static void handle_disconnects(void)
     pid_t pid;
     while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
-        sig_debugf("Client disconnect.\n");
+        debugf("Client disconnect.\n");
         //struct child_data *child = hash_lookup(child_map, &pid);
 
         --num_clients;
@@ -103,7 +103,7 @@ static void handle_client(int fd, struct sockaddr_in *addr,
 
 static void __attribute__((noreturn)) serv_cleanup(void)
 {
-    sig_debugf("Shutdown server.\n");
+    debugf("Shutdown server.\n");
 
     /* kill all our children (usually init claims them and wait()'s
        for them, but not always) */

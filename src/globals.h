@@ -84,8 +84,6 @@
 #define MSG_MAX PIPE_BUF
 #ifndef NDEBUG
 #define debugf(fmt,...) debugf_real(__func__, __LINE__, __FILE__, fmt, ##__VA_ARGS__)
-#define sig_debugf debugf
 #else
-#define debugf(fmt,...)
-#define sig_debugf debugf
+#define debugf(fmt,...) /* nop */
 #endif

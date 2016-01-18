@@ -195,7 +195,7 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
 
     if(data)
     {
-        sig_debugf("auth module: user %s found\n", name2);
+        debugf("auth module: user %s found\n", name2);
         char *new_hash_hex = hash_pass_hex(pass, salt);
 
         /* hashes are in HEX to avoid the Trucha bug */
@@ -212,7 +212,7 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
         }
     }
 
-    sig_debugf("auth failure for user %s\n", name2);
+    debugf("auth failure for user %s\n", name2);
 
     memset(pass, 0, strlen(pass));
     free(pass);

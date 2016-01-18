@@ -1,4 +1,4 @@
-CC = cc
+CC = clang
 OUT = build
 PLATFORM = unix
 

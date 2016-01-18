@@ -23,8 +23,8 @@
 #define SALT_LEN 12
 #define ALGO GCRY_MD_SHA512
 #define AUTH_HASHLEN (512/8)
-//#define HASH_ITERS 500000
-#define HASH_ITERS 1
+#define HASH_ITERS 500000
+//#define HASH_ITERS 1
 
 struct authinfo_t {
     bool success;

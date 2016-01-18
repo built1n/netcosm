@@ -33,10 +33,13 @@ uint16_t telnet_get_height(void)
     return term_height;
 }
 
-int telnet_handle_command(const unsigned char *buf, size_t buflen)
+enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
 {
+    bool iac = false;
     bool found_cmd = false;
     bool in_sb = false;
+
+    debugf("telnet: ");
 
     for(unsigned i = 0; i < buflen; ++i)
     {
@@ -63,52 +66,56 @@ int telnet_handle_command(const unsigned char *buf, size_t buflen)
             {  IP,      "IP"      },
         };
 
-        for(unsigned int cmd_idx = 0; cmd_idx < ARRAYLEN(commands); ++cmd_idx)
+        if(c == IAC)
+            iac = true;
+
+        if(iac)
         {
-            if(c == commands[cmd_idx].val)
+            for(unsigned int cmd_idx = 0; cmd_idx < ARRAYLEN(commands); ++cmd_idx)
             {
-                debugf("%s ", commands[cmd_idx].name);
-                found_cmd = true;
-                switch(c)
+                if(c == commands[cmd_idx].val)
                 {
-                case IP:
-                    return TELNET_EXIT;
-                case SB:
-                    in_sb = true;
-                    break;
-                case NAWS:
-                    if(in_sb)
+                    debugf("%s ", commands[cmd_idx].name);
+                    found_cmd = true;
+                    switch(c)
                     {
-                        /* read height/width */
-                        uint8_t bytes[4];
-                        int j = 0;
-                        while(j < 4 && i < buflen)
+                    case IP:
+                        return TELNET_EXIT;
+                    case SB:
+                        in_sb = true;
+                        break;
+                    case NAWS:
+                        if(in_sb)
                         {
-                            bytes[j++] = buf[++i];
-                            sig_debugf("read byte %d %d\n", buf[i], j);
-                            if(bytes[j - 1] == 255) /* 255 is doubled */
+                            /* read height/width */
+                            uint8_t bytes[4];
+                            int j = 0;
+                            while(j < 4 && i < buflen)
                             {
-                                ++i;
+                                bytes[j++] = buf[++i];
+                                debugf("%d ", buf[j - 1]);
+                                       if(bytes[j - 1] == 255) /* 255 is doubled to distinguish from IAC */
+                                {
+                                    ++i;
+                                }
                             }
+                            term_width = ntohs(*((uint16_t*)bytes));
+                            term_height = ntohs(*((uint16_t*)(bytes+2)));
                         }
-                        term_width = ntohs(*((uint16_t*)bytes));
-                        term_height = ntohs(*((uint16_t*)(bytes+2)));
-                        sig_debugf("term size: %dx%d\n", term_width, term_height);
+                        break;
                     }
-                    break;
+                    goto got_cmd;
                 }
-                goto got_cmd;
             }
         }
-        debugf("???: %d ", c);
+        debugf("%d ", c);
     got_cmd:
         ;
     }
 
-    if(found_cmd)
-        debugf("\n");
+    debugf("\n");
 
-    return TELNET_OK;
+    return found_cmd ? TELNET_FOUNDCMD : TELNET_DATA;
 }
 
 void telnet_echo_off(void)

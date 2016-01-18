@@ -42,11 +42,11 @@
 
 void telnet_init(void);
 
-#define TELNET_OK 0
-#define TELNET_EXIT 1
+enum telnet_status { TELNET_DATA = 0,
+                     TELNET_FOUNDCMD,
+                     TELNET_EXIT };
 
-/* returns either TELNET_OK or TELNET_EXIT */
-int telnet_handle_command(const unsigned char*, size_t);
+enum telnet_status telnet_parse_data(const unsigned char*, size_t);
 
 uint16_t telnet_get_width(void);
 uint16_t telnet_get_height(void);

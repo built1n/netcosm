@@ -42,7 +42,7 @@ void userdb_init(const char *file)
     hash_setfreedata_cb(map, free);
 
     char *format;
-    asprintf(&format, "%%%d[a-z0-9 ]:%%%d[A-Z]:%%%ds:%%d\n",
+    asprintf(&format, "%%%d[a-z0-9 ]:%%%d[A-Z]:%%%ds:%%d:%%ld\n",
              MAX_NAME_LEN, SALT_LEN, AUTH_HASHLEN * 2);
 
     if(f)
@@ -55,9 +55,10 @@ void userdb_init(const char *file)
                              data->username,
                              data->salt,
                              data->passhash,
-                             &data->priv);
+                             &data->priv,
+                             &data->last_login);
 
-            if(ret != 4)
+            if(ret != 5)
             {
                 free(data);
                 break;
@@ -82,11 +83,12 @@ void userdb_write(const char *file)
         ptr = NULL;
         if(!user)
             break;
-        dprintf(fd, "%s:%*s:%*s:%d\n",
+        dprintf(fd, "%s:%*s:%*s:%d:%ld\n",
                 user->username,
                 SALT_LEN, user->salt,
                 AUTH_HASHLEN*2, user->passhash,
-                user->priv);
+                user->priv,
+                user->last_login);
     }
     close(fd);
 }
@@ -115,7 +117,7 @@ struct userdata_t *userdb_add(struct userdata_t *data)
 
     struct userdata_t *ret;
 
-    if((ret = hash_insert(map, new->username, new))) /* failure */
+    if((ret = hash_insert(map, new->username, new))) /* already exists */
     {
         hash_remove(map, new->username);
         ret = hash_insert(map, new->username, new);
@@ -128,6 +130,8 @@ struct userdata_t *userdb_add(struct userdata_t *data)
 
 void userdb_shutdown(void)
 {
+    if(map && db_file)
+        userdb_write(db_file);
     if(map)
     {
         hash_free(map);

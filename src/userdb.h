@@ -35,6 +35,7 @@ struct userdata_t {
 
     priv_t priv;
     room_id room;
+    time_t last_login;
 };
 
 /* call before using anything else */

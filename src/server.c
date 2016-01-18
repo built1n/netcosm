@@ -91,6 +91,7 @@ volatile sig_atomic_t reap_children = 0;
 
 static void sigchld_handler(int sig)
 {
+    (void) sig;
     reap_children = 1;
 }
 
@@ -106,20 +107,24 @@ static void __attribute__((noreturn)) serv_cleanup(void)
 
     /* kill all our children (usually init claims them and wait()'s
        for them, but not always) */
-    struct sigaction sa;
-    sigfillset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, SIGCHLD);
-    sa.sa_handler = SIG_IGN;
-    sigaction(SIGCHLD, &sa, NULL); /* kill all children */
-    void *ptr = child_map, *save;
-    do {
-        struct child_data *child = hash_iterate(ptr, &save, NULL);
-        if(!child)
-            break;
-        ptr = NULL;
-        //kill(child->pid, SIGKILL);
-    } while(1);
-    handle_disconnects();
+    if(child_map)
+    {
+        struct sigaction sa;
+        sigfillset(&sa.sa_mask);
+        sigaddset(&sa.sa_mask, SIGCHLD);
+        sa.sa_handler = SIG_IGN;
+        sa.sa_flags = 0;
+        sigaction(SIGCHLD, &sa, NULL); /* kill all children */
+        void *ptr = child_map, *save;
+        do {
+            struct child_data *child = hash_iterate(ptr, &save, NULL);
+            if(!child)
+                break;
+            ptr = NULL;
+            kill(child->pid, SIGKILL);
+        } while(1);
+        handle_disconnects();
+    }
 
     if(shutdown(server_socket, SHUT_RDWR) > 0)
         error("shutdown");
@@ -210,8 +215,6 @@ static void childreq_cb(EV_P_ ev_io *w, int revents)
 {
     (void) EV_A;
     (void) w;
-    if(reap_children)
-        handle_disconnects();
     /* data from a child's pipe */
     if(revents & EV_READ)
     {
@@ -220,6 +223,8 @@ static void childreq_cb(EV_P_ ev_io *w, int revents)
             handle_disconnects();
         }
     }
+    if(reap_children)
+        handle_disconnects();
 }
 
 static void new_connection_cb(EV_P_ ev_io *w, int revents)
@@ -324,7 +329,6 @@ static void init_signals(void)
 
     /* libev's default SIGCHLD handler exhibits some really strange
      * behavior, which we don't like, so we use our own ;) */
-
     sigemptyset(&sa.sa_mask);
     sigaddset(&sa.sa_mask, SIGCHLD);
     sa.sa_handler = sigchld_handler;

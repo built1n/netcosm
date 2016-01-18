@@ -325,7 +325,7 @@ bool poll_requests(void)
         }
         case REQ_ALLDONE:
             request_complete = 1;
-            break;
+            return true;
         default:
             sig_debugf("WARNING: client process received unknown code %d\n", cmd);
             break;
@@ -457,8 +457,10 @@ auth:
 
         if(current_data)
         {
-            out("Access Granted.\n\n");
+            out("Last login: %s", ctime(&current_data->last_login));
+            current_data->last_login = time(0);
             authlevel = current_data->priv;
+            userdb_request_add(current_data);
             break;
         }
         else
@@ -466,7 +468,7 @@ auth:
             client_change_state(STATE_FAILED);
             free(current_user);
             current_user = NULL;
-            out("Access Denied.\n\n");
+            out("Login incorrect\n\n");
             if(++failures >= MAX_FAILURES)
                 return;
         }

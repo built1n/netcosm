@@ -294,7 +294,7 @@ bool handle_child_req(int in_fd)
 
     pid_t sender_pid;
     memcpy(&sender_pid, packet, sizeof(pid_t));
-    sig_debugf("Got request from PID %d\n", sender_pid);
+    debugf("servreq: Got request from PID %d\n", sender_pid);
 
     struct child_data *sender = hash_lookup(child_map, &sender_pid);
 
@@ -356,11 +356,11 @@ bool handle_child_req(int in_fd)
 
 finish:
 
-    if(req)
-        send_packet(sender, REQ_ALLDONE, NULL, 0);
-
     if(req && req->finalize)
         req->finalize(data, datalen, sender);
+
+    if(req)
+        send_packet(sender, REQ_ALLDONE, NULL, 0);
 
 fail:
     return true;

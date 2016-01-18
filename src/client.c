@@ -58,53 +58,48 @@ try_again:
         goto try_again;
 }
 
-#define WRAP_COLS 80
-
 void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
 {
     char buf[1024];
     memset(buf, 0, sizeof(buf));
     va_list ap;
     va_start(ap, fmt);
+
     vsnprintf(buf, sizeof(buf), fmt, ap);
+
     va_end(ap);
 
     /* do some line wrapping */
 
-    int x = 0;
-
-    char word_buf[sizeof(buf)], *ptr = buf;
-
+    int pos = 0, last_space = 0;
     char newline = '\n';
-
-    int word_idx = 0;
-    while(1)
+    char *ptr = buf;
+    uint16_t line_width = telnet_get_width();
+    while(ptr[pos])
     {
-        char c = *ptr++;
-        if(!c)
-            break;
-        word_buf[word_idx++] = c;
-        x++;
-        if(c == ' ' || c == '\n')
+        bool is_newline = (ptr[pos] == '\n');
+        if(is_newline || pos >= line_width)
         {
-            if(x >= WRAP_COLS - 1)
-            {
-                sig_debugf("Wrapping...\n");
-                out_raw(&newline, 1);
-                x = 0;
-            }
-            out_raw(word_buf, word_idx);
-            word_idx = 0;
+            if(is_newline || !last_space)
+                last_space = pos;
+            while(*ptr && last_space-- > 0)
+                out_raw(ptr++, 1);
+            out_raw(&newline, 1);
+            if(is_newline)
+                ++ptr; /* skip newline */
+            while(*ptr && *ptr == ' ')
+                ++ptr;
+            last_space = 0;
+            pos = 0;
+        }
+        else
+        {
+            if(ptr[pos] == ' ')
+                last_space = pos;
+            ++pos;
         }
     }
-
-    if(x >= WRAP_COLS - 1)
-    {
-        sig_debugf("Wrapping...\n");
-        out_raw(&newline, 1);
-        x = 0;
-    }
-    out_raw(word_buf, word_idx);
+    out_raw(ptr, strlen(ptr));
 }
 
 static volatile sig_atomic_t request_complete;
@@ -157,7 +152,7 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
 
     poll(&pfd, 1, -1);
 
-    while(poll_requests());
+    while(!request_complete) poll_requests();
 
     free(req);
 }
@@ -198,14 +193,16 @@ tryagain:
                 }
                 else if(fds[i].fd == client_fd)
                 {
-                    if(read(client_fd, buf, BUFSZ - 1) < 0)
+                    ssize_t len = read(client_fd, buf, BUFSZ - 1);
+                    if(len < 0)
                         error("lost connection");
 
                     buf[BUFSZ - 1] = '\0';
-                    if(buf[0] & 0x80)
-                    {
-                        int ret = telnet_handle_command((unsigned char*)buf);
 
+                    enum telnet_status ret = telnet_parse_data((unsigned char*)buf, len);
+
+                    if(ret != TELNET_DATA)
+                    {
                         free(buf);
                         if(ret == TELNET_EXIT)
                             exit(0);
@@ -485,7 +482,7 @@ auth:
         client_change_state(STATE_LOGGEDIN);
 
     /* authenticated */
-    debugf("Authenticated as %s\n", current_user);
+    debugf("client: Authenticated as %s\n", current_user);
     client_change_user(current_user);
     current_room = 0;
     client_change_room(current_room);

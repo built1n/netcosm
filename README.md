@@ -65,3 +65,8 @@ for data, and so would not receive the request.
 
 Handle 100 simultaneous users sending 100 requests/second with 50ms
 latency.
+
+## Known Bugs
+
+* Telnet server implementation is not fully conforming
+* Initial account login time is bogus

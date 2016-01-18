@@ -33,18 +33,8 @@ void debugf_real(const char *func, int line, const char *file, const char *fmt, 
     (void) func;
     (void) line;
     (void) file;
-    static int fd = -1;
-    if(fd < 0)
-        fd = open(LOGFILE, O_APPEND | O_WRONLY | O_CREAT, 0600);
-    if(fd < 0)
-        error("unknown");
+
     int len;
-#if 0
-    char *prefix;
-    len = asprintf(&prefix, "%s:%s:%d: ", func, file, line);
-    write(STDOUT_FILENO, prefix, len);
-    free(prefix);
-#endif
 
     va_list ap;
     va_start(ap, fmt);
@@ -53,8 +43,6 @@ void debugf_real(const char *func, int line, const char *file, const char *fmt, 
     len = vasprintf(&buf, fmt, ap);
 
     write(STDOUT_FILENO, buf, len);
-    write(fd, buf, len);
-    fflush(fdopen(fd, "a"));
 
     free(buf);
 

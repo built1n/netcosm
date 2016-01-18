@@ -4,3 +4,5 @@ a.out
 *.bin
 *.o
 *~
+*.d
+netcosm.log

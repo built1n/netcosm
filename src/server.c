@@ -106,7 +106,9 @@ static void __attribute__((noreturn)) serv_cleanup(void)
     /* kill all our children (usually init claims them and wait()'s
        for them, but not always) */
     struct sigaction sa;
-    sigfillset(&sa.sa_mask); sigaddset(&sa.sa_mask, SIGCHLD);
+    sigfillset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGCHLD);
+    sa.sa_handler = SIG_IGN;
     sigaction(SIGCHLD, &sa, NULL); /* kill all children */
     void *ptr = child_map, *save;
     do {
@@ -163,29 +165,6 @@ static void init_signals(void)
     if(sigaction(SIGINT, &sa, NULL) < 0)
         error("sigaction");
     if(sigaction(SIGTERM, &sa, NULL) < 0)
-        error("sigaction");
-
-    sigemptyset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, SIGRTMIN+1);
-    sa.sa_sigaction = master_ack_handler;
-    sa.sa_flags = SA_SIGINFO | SA_RESTART;
-    if(sigaction(SIGRTMIN+1, &sa, NULL) < 0)
-        error("sigaction");
-
-    sigemptyset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, SIGPIPE);
-    sa.sa_handler = SIG_IGN;
-    sa.sa_flags = SA_RESTART;
-    if(sigaction(SIGPIPE, &sa, NULL) < 0)
-        error("sigaction");
-
-    /* we set this now so there's no race condition after a fork() */
-    sigemptyset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, SIGRTMIN);
-    sigaddset(&sa.sa_mask, SIGPIPE);
-    sa.sa_sigaction = sig_rt_0_handler;
-    sa.sa_flags = SA_RESTART | SA_SIGINFO;
-    if(sigaction(SIGRTMIN, &sa, NULL) < 0)
         error("sigaction");
 }
 
@@ -251,11 +230,13 @@ static void childreq_cb(EV_P_ ev_io *w, int revents)
 {
     (void) EV_A;
     (void) w;
-    (void) revents;
     /* data from a child's pipe */
-    if(!handle_child_req(w->fd))
+    if(revents & EV_READ)
     {
-        handle_disconnects();
+        if(!handle_child_req(w->fd))
+        {
+            handle_disconnects();
+        }
     }
 }
 
@@ -276,9 +257,9 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
     int outpipe [2]; /* parent->child */
 
     if(pipe2(readpipe, O_DIRECT) < 0)
-        error("pipe");
+        error("error creating pipe, need linux kernel >= 3.4");
     if(pipe2(outpipe, O_NONBLOCK | O_DIRECT) < 0)
-        error("pipe");
+        error("error creating pipe, need linux kernel >= 3.4");
 
     pid_t pid = fork();
     if(pid < 0)

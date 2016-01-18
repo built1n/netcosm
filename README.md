@@ -6,7 +6,7 @@ features might drift out of existence without prior warning!
 
 ## Installation
 
-### Prerequisities:
+### Prerequisites:
 
 * libgcrypt
 * libev
@@ -48,13 +48,18 @@ follows:
 
 The master polls child pipes for data, and processes any requests it
 finds. The master then writes it's data to the pipes of any children
-involved in the request, signals them with SIGRTMIN+0, and waits for
-all of them to signal back with SIGRTMIN+1. The children read the data
-from the master, and handle it accordingly.
+involved in the request.
 
-TODO: the signal-based ACK framework is really flakey. A better idea
-would be to have the child poll for data from the master at intervals,
-so the whole mess of signal handling can be avoided.
+Child processes that serve connected clients poll for input from the
+master process while waiting for client input. The format of these
+requests is as follows:
+
+    | Request Code | Data (if any) |
+
+Child requests (that is, requests a child sends to the master) are
+very reliable. However, requests from the master process to its child
+processes are not so reliable. The child process may not be polling
+for data, and so would not receive the request.
 
 ## Design Goals
 

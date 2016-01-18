@@ -44,3 +44,5 @@ struct child_data {
 extern volatile int num_clients;
 extern void *child_map;
 extern bool are_child;
+
+int server_main(int argc, char *argv[]);

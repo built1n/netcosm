@@ -22,7 +22,8 @@
 #define _GNU_SOURCE
 
 #include <ev.h>
-#include <gcrypt.h>
+#include <openssl/sha.h>
+#include <openssl/opensslv.h>
 
 #include <arpa/inet.h>
 #include <assert.h>
@@ -33,6 +34,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>

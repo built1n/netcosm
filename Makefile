@@ -7,7 +7,7 @@ NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
 CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
 	-std=c99 -fno-strict-aliasing
-LDFLAGS = -lgcrypt -lev
+LDFLAGS = -lev -lssl -lcrypto
 
 HEADERS = src/*.h export/include/*.h
 
@@ -23,7 +23,7 @@ all: $(OUT)/$(PLATFORM).bin Makefile SOURCES $(HEADERS) $(DEPS)
 $(OUT)/$(PLATFORM).bin: $(NETCOSM_OBJ) $(HEADERS) Makefile
 	@mkdir -p $(OUT)
 	@echo "LD $@"
-	@$(CC) $(NETCOSM_OBJ) $(CFLAGS) $(LDFLAGS) -o $(OUT)/$(PLATFORM).bin
+	@$(CC) $(NETCOSM_OBJ) $(CFLAGS) -o $(OUT)/$(PLATFORM).bin $(LDFLAGS)
 
 # automatically generate dependency rules
 

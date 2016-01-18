@@ -337,15 +337,13 @@ static void init_signals(void)
         error("sigaction");
 }
 
-int main(int argc, char *argv[])
+int server_main(int argc, char *argv[])
 {
-    debugf("*** Starting NetCosm "NETCOSM_VERSION" (libev %d.%d, libgcrypt "GCRYPT_VERSION") ***\n",
-           EV_VERSION_MAJOR, EV_VERSION_MINOR);
+    debugf("*** Starting NetCosm %s (libev %d.%d, %s) ***\n",
+           NETCOSM_VERSION, EV_VERSION_MAJOR, EV_VERSION_MINOR, OPENSSL_VERSION_TEXT);
 
     assert(ev_version_major() == EV_VERSION_MAJOR &&
            ev_version_minor() >= EV_VERSION_MINOR);
-
-    assert(!strcmp(GCRYPT_VERSION, gcry_check_version(GCRYPT_VERSION)));
 
     if(argc != 2)
         port = PORT;
@@ -372,8 +370,26 @@ int main(int argc, char *argv[])
 
     struct ev_loop *loop = EV_DEFAULT;
 
-    /* we initialize signals after creating the default event loop */
+    /* we initialize signals after creating the default event loop
+     * because libev grabs SIGCHLD */
     init_signals();
+
+    /* drop root privileges */
+    if(getuid() == 0)
+    {
+        struct passwd *nobody = getpwnam("nobody");
+        if(!nobody)
+            error("couldn't get unprivileged user");
+        if(setgid(nobody->pw_gid) != 0)
+            error("setgid");
+        if(setuid(nobody->pw_uid) != 0)
+            error("setuid");
+        if(setuid(0) >= 0)
+            error("failed to drop root");
+        if(access(USERFILE, R_OK) >= 0)
+            error("failed to drop root");
+        debugf("Dropped root privileges.\n");
+    }
 
     ev_io server_watcher;
     ev_io_init(&server_watcher, new_connection_cb, server_socket, EV_READ);

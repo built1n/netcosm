@@ -18,32 +18,13 @@
 
 #pragma once
 
-/* commands */
-#define IAC  255
-#define DONT 254
-#define DO   253
-#define WONT 252
-#define WILL 251
-#define SB   250
-#define GA   249
-#define EL   248
-#define EC   247
-#define AYT  246
-#define IP   244
-#define NOP  241
-#define SE   240
-
-/* options */
-#define ECHO     1
-#define SGA      3
-#define STATUS   5
-#define NAWS     31
-#define LINEMODE 34
+#include <arpa/telnet.h>
 
 void telnet_init(void);
 
 enum telnet_status { TELNET_DATA = 0,
                      TELNET_FOUNDCMD,
+                     TELNET_LINEOVER,
                      TELNET_EXIT };
 
 enum telnet_status telnet_parse_data(const unsigned char*, size_t);

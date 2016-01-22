@@ -37,6 +37,7 @@
 #define REQ_ADDUSERDATA       15 /* server: insert user data; child: success/fail */
 #define REQ_PRINTNEWLINE      16 /* child: print a newline */
 #define REQ_ALLDONE           17 /* child: break out of send_master() */
+#define REQ_KICKALL           18 /* server: kick everyone except the sender */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */

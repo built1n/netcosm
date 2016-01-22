@@ -18,16 +18,18 @@
 
 #pragma once
 
+/* Our world is an array of rooms, each having a list of objects in
+   them, as well as actions that can be performed in the room. Objects
+   are added by hooks in rooms, which are provided by the world
+   module. */
+
 typedef enum room_id { ROOM_NONE = -1 } room_id;
 
 typedef unsigned __int128 obj_id;
 
-enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
+typedef struct child_data user_t;
 
-struct user_t {
-    struct child_data *data;
-    struct user_t *next;
-};
+enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
 
 /* the data we get from a world module */
 struct roomdata_t {
@@ -41,30 +43,33 @@ struct roomdata_t {
     const char * const adjacent[NUM_DIRECTIONS];
 
     void (* const hook_init)(room_id id);
-    void (* const hook_enter)(room_id room, struct user_t *user);
-    void (* const hook_leave)(room_id room, struct user_t *user);
+    void (* const hook_enter)(room_id room, user_t *user);
+    void (* const hook_leave)(room_id room, user_t *user);
 };
 
 struct object_t {
     obj_id id;
-    const char *class;
+
     const char *name; /* no articles: "a", "an", "the" */
-    bool proper; /* whether to use "the" in describing this object */
 
     void *userdata;
 
+    bool can_take;
+    bool list;
+
     void (*hook_serialize)(int fd, struct object_t*);
-    void (*hook_take)(struct object_t*, struct user_t *user);
-    void (*hook_drop)(struct object_t*, struct user_t *user);
-    void (*hook_use)(struct object_t*, struct user_t *user);
+    void (*hook_take)(struct object_t*, user_t *user);
+    void (*hook_drop)(struct object_t*, user_t *user);
+    void (*hook_use)(struct object_t*, user_t *user);
     void (*hook_destroy)(struct object_t*);
+    char* (*hook_desc)(struct object_t*, user_t*);
 };
 
 struct verb_t {
     const char *name;
 
     /* toks is strtok_r's pointer */
-    void (*execute)(const char *toks, struct user_t *user);
+    void (*execute)(const char *toks, user_t *user);
 };
 
 struct room_t {
@@ -73,16 +78,10 @@ struct room_t {
 
     room_id adjacent[NUM_DIRECTIONS];
 
-    /* arrays instead of linked lists because insertion should be rare for these */
-    size_t objects_sz;
-    struct object_t *objects;
-
-    size_t verbs_sz;
-    struct verb_t *verbs;
-
-    /* linked list for users, random access is rare */
-    struct user_t *users;
-    int num_users;
+    /* hash maps */
+    void *objects;
+    void *verbs;
+    void *users; /* PID -> user_t */
 };
 
 /* room/world */
@@ -94,6 +93,10 @@ struct room_t *room_get(room_id id);
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
 
+/* returns a new object */
 struct object_t *obj_new(void);
+
+/* new should point to a statically allocated object */
+void obj_add(room_id room, struct object_t *new);
 
 void world_free(void);

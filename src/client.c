@@ -72,9 +72,10 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
     /* do some line wrapping */
 
     int pos = 0, last_space = 0;
-    char newline = '\n';
     char *ptr = buf;
-    uint16_t line_width = telnet_get_width();
+    uint16_t line_width = telnet_get_width() + 1;
+    char *line_buf = malloc(line_width + 2);
+    size_t line_idx = 0;
     while(ptr[pos])
     {
         bool is_newline = (ptr[pos] == '\n');
@@ -82,12 +83,21 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
         {
             if(is_newline || !last_space)
                 last_space = pos;
+
             while(*ptr && last_space-- > 0)
-                out_raw(ptr++, 1);
-            out_raw(&newline, 1);
+            {
+                line_buf[line_idx++] = *ptr++;
+            }
+
+            line_buf[line_idx++] = '\r';
+            line_buf[line_idx++] = '\n';
+
+            out_raw(line_buf, line_idx);
+            line_idx = 0;
+
             if(is_newline)
-                ++ptr; /* skip newline */
-            while(*ptr && *ptr == ' ')
+                ++ptr; /* skip the newline */
+            while(*ptr == ' ')
                 ++ptr;
             last_space = 0;
             pos = 0;
@@ -100,6 +110,7 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
         }
     }
     out_raw(ptr, strlen(ptr));
+    free(line_buf);
 }
 
 static volatile sig_atomic_t request_complete;
@@ -155,6 +166,8 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
     while(!request_complete) poll_requests();
 
     free(req);
+
+    debugf("done with request\n");
 }
 
 #define BUFSZ 128
@@ -162,10 +175,12 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
 char *client_read(void)
 {
     char *buf;
-
+    size_t bufidx;
 tryagain:
 
     buf = malloc(BUFSZ);
+    bufidx = 0;
+
     memset(buf, 0, BUFSZ);
 
     /* set of the client fd and the pipe from our parent */
@@ -193,20 +208,27 @@ tryagain:
                 }
                 else if(fds[i].fd == client_fd)
                 {
-                    ssize_t len = read(client_fd, buf, BUFSZ - 1);
+                    ssize_t len = read(client_fd, buf + bufidx, BUFSZ - bufidx - 1);
                     if(len < 0)
                         error("lost connection");
 
                     buf[BUFSZ - 1] = '\0';
 
-                    enum telnet_status ret = telnet_parse_data((unsigned char*)buf, len);
+                    enum telnet_status ret = telnet_parse_data((unsigned char*)buf + bufidx, len);
 
-                    if(ret != TELNET_DATA)
+                    switch(ret)
                     {
+                    case TELNET_EXIT:
+                    case TELNET_FOUNDCMD:
                         free(buf);
                         if(ret == TELNET_EXIT)
                             exit(0);
                         goto tryagain;
+                    case TELNET_DATA:
+                        bufidx += len;
+                        continue;
+                    case TELNET_LINEOVER:
+                        break;
                     }
 
                     remove_cruft(buf);
@@ -267,6 +289,8 @@ bool poll_requests(void)
         got_cmd = true;
 
         unsigned char cmd = packet[0];
+
+        debugf("Child gets code %d\n", cmd);
 
         switch(cmd)
         {
@@ -348,6 +372,8 @@ void client_change_room(room_id id)
     send_master(REQ_SETROOM, &id, sizeof(id));
 }
 
+void *dir_map = NULL;
+
 void client_move(const char *dir)
 {
     const struct dir_pair {
@@ -377,14 +403,13 @@ void client_move(const char *dir)
         {  "IN",         DIR_IN    },
         {  "OUT",        DIR_OT    },
     };
-    static void *map = NULL;
-    if(!map)
+    if(!dir_map)
     {
-        map = hash_init(ARRAYLEN(dirs), hash_djb, compare_strings);
-        hash_insert_pairs(map, (struct hash_pair*)dirs, sizeof(struct dir_pair), ARRAYLEN(dirs));
+        dir_map = hash_init(ARRAYLEN(dirs), hash_djb, compare_strings);
+        hash_insert_pairs(dir_map, (struct hash_pair*)dirs, sizeof(struct dir_pair), ARRAYLEN(dirs));
     }
 
-    struct dir_pair *pair = hash_lookup(map, dir);
+    struct dir_pair *pair = hash_lookup(dir_map, dir);
     if(pair)
     {
         send_master(REQ_MOVE, &pair->val, sizeof(pair->val));
@@ -415,6 +440,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
     char *ip = inet_ntoa(addr->sin_addr);
     debugf("New client %s\n", ip);
     debugf("Total clients: %d\n", total);
+
+    debugf("client is running with uid %d\n", getuid());
 
 auth:
 
@@ -601,8 +628,15 @@ auth:
                 else if(!strcmp(what, "KICK"))
                 {
                     char *pid_s = strtok_r(NULL, WSPACE, &save);
+                    all_upper(pid_s);
                     if(pid_s)
                     {
+                        if(!strcmp(pid_s, "ALL"))
+                        {
+                            const char *msg = "Kicking everyone...\n";
+                            send_master(REQ_KICKALL, msg, strlen(msg));
+                            goto next_cmd;
+                        }
                         /* weird pointer voodoo */
                         /* TODO: simplify */
                         char pidbuf[MAX(sizeof(pid_t), MSG_MAX)];

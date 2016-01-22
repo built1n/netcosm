@@ -5,7 +5,7 @@ PLATFORM = unix
 NETCOSM_SRC = $(shell cat SOURCES)
 NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
-CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
+CFLAGS = -Og -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
 	-std=c99 -fno-strict-aliasing
 LDFLAGS = -lev -lssl -lcrypto
 
@@ -67,3 +67,8 @@ help:
 	@echo "  depclean	- Remove dependency files"
 	@echo "  veryclean	- Remove object and dependency files"
 	@echo "Build targets:"
+
+.PHONY: setcap
+setcap:
+	@echo "Enabling CAP_NET_BIND_SERVICE on "$(OUT)/$(PLATFORM).bin"..."
+	@sudo setcap 'cap_net_bind_service=+ep' $(OUT)/$(PLATFORM).bin

@@ -19,6 +19,8 @@
 #include "globals.h"
 
 #include "client.h"
+
+#define TELCMDS
 #include "telnet.h"
 
 static uint16_t term_width, term_height;
@@ -38,6 +40,7 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
     bool iac = false;
     bool found_cmd = false;
     bool in_sb = false;
+    bool line_done = false;
 
     debugf("telnet: ");
 
@@ -45,67 +48,50 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
     {
         unsigned char c = buf[i];
 
-        const struct telnet_cmd {
-            int val;
-            const char *name;
-        } commands[] = {
-            {  IAC,     "IAC"     },
-            {  DONT,    "DONT"    },
-            {  DO,      "DO"      },
-            {  WONT,    "WONT"    },
-            {  WILL,    "WILL"    },
-            {  GA,      "GA"      },
-            {  AYT,     "AYT"     },
-            {  NOP,     "NOP"     },
-            {  SB,      "SB"      },
-            {  SE,      "SE"      },
-            {  ECHO,    "ECHO"    },
-            {  SGA,     "SGA"     },
-            {  STATUS,  "STATUS"  },
-            {  NAWS,    "NAWS"    },
-            {  IP,      "IP"      },
-        };
-
         if(c == IAC)
             iac = true;
+        else if(c == '\n' || c == '\r')
+        {
+            debugf("found newline, done reading.\n");
+            line_done = true;
+        }
 
         if(iac)
         {
-            for(unsigned int cmd_idx = 0; cmd_idx < ARRAYLEN(commands); ++cmd_idx)
+            if(TELCMD_OK(c))
             {
-                if(c == commands[cmd_idx].val)
+                debugf("%s ", TELCMD(c));
+                found_cmd = true;
+                switch(c)
                 {
-                    debugf("%s ", commands[cmd_idx].name);
-                    found_cmd = true;
-                    switch(c)
+                case IP:
+                    return TELNET_EXIT;
+                case SB:
+                    in_sb = true;
+                    break;
+                case TELOPT_NAWS:
+                    if(in_sb)
                     {
-                    case IP:
-                        return TELNET_EXIT;
-                    case SB:
-                        in_sb = true;
-                        break;
-                    case NAWS:
-                        if(in_sb)
+                        /* read height/width */
+                        uint8_t bytes[4];
+                        int j = 0;
+                        while(j < 4 && i < buflen)
                         {
-                            /* read height/width */
-                            uint8_t bytes[4];
-                            int j = 0;
-                            while(j < 4 && i < buflen)
+                            bytes[j++] = buf[++i];
+                            debugf("%d ", buf[j - 1]);
+                            if(bytes[j - 1] == 255) /* 255 is doubled to distinguish from IAC */
                             {
-                                bytes[j++] = buf[++i];
-                                debugf("%d ", buf[j - 1]);
-                                       if(bytes[j - 1] == 255) /* 255 is doubled to distinguish from IAC */
-                                {
-                                    ++i;
-                                }
+                                ++i;
                             }
-                            term_width = ntohs(*((uint16_t*)bytes));
-                            term_height = ntohs(*((uint16_t*)(bytes+2)));
                         }
-                        break;
+                        if(i >= buflen && j != 4)
+                            error("client SB NAWS command to short");
+                        term_width = ntohs(*((uint16_t*)bytes));
+                        term_height = ntohs(*((uint16_t*)(bytes+2)));
                     }
-                    goto got_cmd;
+                    break;
                 }
+                goto got_cmd;
             }
         }
         debugf("%d ", c);
@@ -114,15 +100,17 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
     }
 
     debugf("\n");
+    if(found_cmd)
+        debugf("telnet: is NOT data\n");
 
-    return found_cmd ? TELNET_FOUNDCMD : TELNET_DATA;
+    return found_cmd ? TELNET_FOUNDCMD :
+        (line_done ? TELNET_LINEOVER : TELNET_DATA);
 }
 
 void telnet_echo_off(void)
 {
     const unsigned char seq[] = {
-        IAC, DONT, ECHO,
-        IAC, WILL, ECHO,
+        IAC, WILL, TELOPT_ECHO,
     };
     out_raw(seq, ARRAYLEN(seq));
 }
@@ -130,8 +118,7 @@ void telnet_echo_off(void)
 void telnet_echo_on(void)
 {
     const unsigned char seq[] = {
-        IAC, DO, ECHO,
-        IAC, WONT, ECHO,
+        IAC, WONT, TELOPT_ECHO,
     };
     out_raw(seq, ARRAYLEN(seq));
 }
@@ -139,18 +126,17 @@ void telnet_echo_on(void)
 void telnet_init(void)
 {
     const unsigned char init_seq[] = {
-        IAC, WONT, SGA,
-        IAC, DONT, SGA,
+        IAC, WONT, TELOPT_SGA,
+        IAC, DONT, TELOPT_SGA,
 
-        IAC, DO, NAWS,
+        IAC, DO, TELOPT_NAWS,
 
-        IAC, WONT, STATUS,
-        IAC, DONT, STATUS,
+        IAC, WONT, TELOPT_STATUS,
+        IAC, DONT, TELOPT_STATUS,
 
-        IAC, DO,   ECHO,
-        IAC, WONT, ECHO,
+        IAC, DO,   TELOPT_ECHO,
 
-        IAC, DONT, LINEMODE,
+        IAC, DONT, TELOPT_LINEMODE,
     };
     term_width = 80;
     term_height = 24;

@@ -103,28 +103,10 @@ static void handle_client(int fd, struct sockaddr_in *addr,
 
 static void __attribute__((noreturn)) serv_cleanup(void)
 {
-    debugf("Shutdown server.\n");
-
-    /* kill all our children (usually init claims them and wait()'s
-       for them, but not always) */
-    if(child_map)
-    {
-        struct sigaction sa;
-        sigfillset(&sa.sa_mask);
-        sigaddset(&sa.sa_mask, SIGCHLD);
-        sa.sa_handler = SIG_IGN;
-        sa.sa_flags = 0;
-        sigaction(SIGCHLD, &sa, NULL); /* kill all children */
-        void *ptr = child_map, *save;
-        do {
-            struct child_data *child = hash_iterate(ptr, &save, NULL);
-            if(!child)
-                break;
-            ptr = NULL;
-            kill(child->pid, SIGKILL);
-        } while(1);
-        handle_disconnects();
-    }
+    if(!are_child)
+        debugf("Shutdown server.\n");
+    else
+        debugf("Shutdown worker.\n");
 
     if(shutdown(server_socket, SHUT_RDWR) > 0)
         error("shutdown");
@@ -135,6 +117,10 @@ static void __attribute__((noreturn)) serv_cleanup(void)
     reqmap_free();
     hash_free(child_map);
     child_map = NULL;
+
+    extern void *dir_map;
+    hash_free(dir_map);
+    dir_map = NULL;
 
     userdb_shutdown();
 
@@ -150,7 +136,7 @@ static void __attribute__((noreturn)) serv_cleanup(void)
 static void __attribute__((noreturn)) sigint_handler(int s)
 {
     (void) s;
-    serv_cleanup();
+    exit(0);
 }
 
 static void check_userfile(void)
@@ -207,9 +193,6 @@ static int server_bind(void)
 
     return sock;
 }
-
-static SIMP_HASH(pid_t, pid_hash);
-static SIMP_EQUAL(pid_t, pid_equal);
 
 static void childreq_cb(EV_P_ ev_io *w, int revents)
 {
@@ -337,6 +320,9 @@ static void init_signals(void)
         error("sigaction");
 }
 
+static SIMP_HASH(pid_t, pid_hash);
+static SIMP_EQUAL(pid_t, pid_equal);
+
 int server_main(int argc, char *argv[])
 {
     debugf("*** Starting NetCosm %s (libev %d.%d, %s) ***\n",
@@ -353,6 +339,7 @@ int server_main(int argc, char *argv[])
     srand(time(0));
 
     server_socket = server_bind();
+
     userdb_init(USERFILE);
 
     check_userfile();
@@ -374,27 +361,12 @@ int server_main(int argc, char *argv[])
      * because libev grabs SIGCHLD */
     init_signals();
 
-    /* drop root privileges */
-    if(getuid() == 0)
-    {
-        struct passwd *nobody = getpwnam("nobody");
-        if(!nobody)
-            error("couldn't get unprivileged user");
-        if(setgid(nobody->pw_gid) != 0)
-            error("setgid");
-        if(setuid(nobody->pw_uid) != 0)
-            error("setuid");
-        if(setuid(0) >= 0)
-            error("failed to drop root");
-        if(access(USERFILE, R_OK) >= 0)
-            error("failed to drop root");
-        debugf("Dropped root privileges.\n");
-    }
-
     ev_io server_watcher;
     ev_io_init(&server_watcher, new_connection_cb, server_socket, EV_READ);
     ev_set_priority(&server_watcher, EV_MAXPRI);
     ev_io_start(EV_A_ &server_watcher);
+
+    atexit(serv_cleanup);
 
     ev_loop(loop, 0);
 

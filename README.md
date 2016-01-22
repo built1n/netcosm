@@ -8,9 +8,9 @@ features might drift out of existence without prior warning!
 
 ### Prerequisites:
 
-* libgcrypt
+* openssl
 * libev
-* linux >= 3.4 (need "packet mode" pipes)
+* linux >= 3.4 (for "packet mode" pipes)
 * glibc >= 2.9
 
 ### Compiling
@@ -18,6 +18,17 @@ features might drift out of existence without prior warning!
     make
 
 This gives you the executable in `build/unix.bin`.
+
+### Running
+
+If you want to listen on a privileged port (below 1024), you will
+either have to run the executable as root (not recommended), or set
+the CAP_NET_BIND_SERVICE capability on Linux:
+
+    sudo setcap 'cap_net_bind_service=+ep' build/unix.bin
+
+If running as root, you will need an unprivileged user called 'nobody'
+on your system in order for things to work.
 
 ## Todo List
 
@@ -29,14 +40,14 @@ This gives you the executable in `build/unix.bin`.
 
 ## Internal Design
 
+### Child-Master Requests
+
 A child process is spawned for every client that connects.  There are
 two pipes created for every child: a pipe for the child to write to,
 and a pipe for the master to write to.
 
 Both of these pipes are created in "packet mode" (see pipe(2)), and
 therefore require at least linux 3.4 and glibc 2.9.
-
-### Child-Master Requests
 
 Many operations, such as listing clients, require the help of the
 master process. To request an operation, the child writes it's request

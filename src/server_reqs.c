@@ -30,7 +30,13 @@ static void send_packet(struct child_data *child, unsigned char cmd,
     pkt[0] = cmd;
     if(datalen)
         memcpy(pkt + 1, data, datalen);
-    write(child->outpipe[1], pkt, datalen + 1);
+tryagain:
+    if(write(child->outpipe[1], pkt, datalen + 1) < 0)
+    {
+        /* write can fail, so we try again */
+        if(errno == EAGAIN)
+            goto tryagain;
+    }
 }
 
 static void req_pass_msg(unsigned char *data, size_t datalen,
@@ -217,6 +223,13 @@ static void req_send_geninfo(unsigned char *data, size_t datalen, struct child_d
     send_packet(sender, REQ_BCASTMSG, buf, len);
 }
 
+static void req_kick_always(unsigned char *data, size_t datalen,
+                            struct child_data *sender, struct child_data *child)
+{
+    (void) sender;
+    send_packet(child, REQ_KICK, data, datalen);
+}
+
 static const struct child_request {
     unsigned char code;
 
@@ -245,6 +258,7 @@ static const struct child_request {
     { REQ_GETUSERDATA, true,  CHILD_NONE,           NULL,                req_send_user,     },
     { REQ_DELUSERDATA, true,  CHILD_NONE,           NULL,                req_del_user,      },
     { REQ_ADDUSERDATA, true,  CHILD_NONE,           NULL,                req_add_user,      },
+    { REQ_KICKALL,     true,  CHILD_ALL_BUT_SENDER, req_kick_always,     NULL               },
     //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,           },
 };
 
@@ -289,6 +303,8 @@ bool handle_child_req(int in_fd)
 
     ssize_t packet_len = read(in_fd, packet, MSG_MAX);
 
+    struct child_data *sender = NULL;
+
     if(packet_len <= 0)
         goto fail;
 
@@ -296,7 +312,7 @@ bool handle_child_req(int in_fd)
     memcpy(&sender_pid, packet, sizeof(pid_t));
     debugf("servreq: Got request from PID %d\n", sender_pid);
 
-    struct child_data *sender = hash_lookup(child_map, &sender_pid);
+    sender = hash_lookup(child_map, &sender_pid);
 
     if(!sender)
     {
@@ -343,6 +359,8 @@ bool handle_child_req(int in_fd)
         if(child->pid == sender->pid)
             continue;
 
+        debugf("iterating over child %d\n", child->pid);
+
         switch(req->which)
         {
         case CHILD_ALL:
@@ -356,12 +374,19 @@ bool handle_child_req(int in_fd)
 
 finish:
 
+    debugf("finalizing request\n");
+
     if(req && req->finalize)
         req->finalize(data, datalen, sender);
 
-    if(req)
+    /* fall through */
+fail:
+    if(sender)
+    {
         send_packet(sender, REQ_ALLDONE, NULL, 0);
 
-fail:
+        debugf("sending all done code\n");
+    }
+
     return true;
 }

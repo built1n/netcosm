@@ -21,8 +21,10 @@
 #include "hash.h"
 #include "server.h"
 #include "room.h"
+#include "userdb.h"
 
 /* processed world data */
+
 static struct room_t *world;
 static size_t world_sz;
 static char *world_name;
@@ -40,51 +42,17 @@ bool room_user_add(room_id id, struct child_data *child)
     if(!room)
         error("unknown room %d", id);
 
-    struct user_t *iter = room->users, *last = NULL;
-    while(iter)
-    {
-        if(iter->data->pid == child->pid)
-            return false;
-        last = iter;
-        iter = iter->next;
-    }
-
-    struct user_t *new = calloc(sizeof(struct user_t), 1);
-
-    new->data = child;
-    new->next = NULL;
-
-    if(last)
-        last->next = new;
+    if(hash_insert(room->users, &child->pid, child))
+        return false;
     else
-        room->users = new;
-
-    ++room->num_users;
-
-    return true;
+        return true;
 }
 
 bool room_user_del(room_id id, struct child_data *child)
 {
     struct room_t *room = room_get(id);
 
-    struct user_t *iter = room->users, *last = NULL;
-    while(iter)
-    {
-        if(iter->data->pid == child->pid)
-        {
-            if(last)
-                last->next = iter->next;
-            else
-                room->users = iter->next;
-            free(iter);
-            --room->num_users;
-            return true;
-        }
-        last = iter;
-        iter = iter->next;
-    }
-    return false;
+    return hash_remove(room->users, &child->pid);
 }
 
 void write_roomid(int fd, room_id *id)
@@ -143,12 +111,8 @@ void world_save(const char *fname)
 
 static void room_free(struct room_t *room)
 {
-    while(room->users)
-    {
-        struct user_t *old = room->users;
-        room->users = room->users->next;
-        free(old);
-    }
+    hash_free(room->users);
+    room->users = NULL;
     free(room->data.name);
     free(room->data.desc);
 }
@@ -167,6 +131,9 @@ void world_free(void)
         world = NULL;
     }
 }
+
+static SIMP_HASH(pid_t, pid_hash);
+static SIMP_EQUAL(pid_t, pid_equal);
 
 /**
  * Loads a world using data on disk and in memory.
@@ -205,6 +172,8 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
 
     for(unsigned i = 0; i < world_sz; ++i)
     {
+        world[i].users = hash_init((userdb_size() + 1) / 2, pid_hash, pid_equal);
+
         world[i].id = read_roomid(fd);
         memcpy(&world[i].data, data + i, sizeof(struct roomdata_t));
         world[i].data.name = read_string(fd);
@@ -254,6 +223,8 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
                     world[i].adjacent[dir] = room->id;
             }
         }
+
+        world[i].users = hash_init((userdb_size() + 1) / 2, pid_hash, pid_equal);
 
         world_sz = i + 1;
     }

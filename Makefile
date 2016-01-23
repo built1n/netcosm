@@ -1,20 +1,22 @@
 CC = cc
 OUT = build
 PLATFORM = unix
+PREFIX = /usr/local
 
 NETCOSM_SRC = $(shell cat SOURCES)
 NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
-CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
+CFLAGS = -Og -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
 	-std=c99 -fno-strict-aliasing
-LDFLAGS = -lev -lssl -lcrypto
+
+LDFLAGS = -lev -lcrypto
 
 HEADERS = src/*.h export/include/*.h
 
 DEPS = $(NETCOSM_SRC:.c=.d)
 
 .PHONY: all
-all: $(OUT)/$(PLATFORM).bin Makefile SOURCES $(HEADERS) $(DEPS)
+all: $(OUT)/$(PLATFORM).bin
 
 %.o: %.c Makefile %.d
 	@echo "CC $<"
@@ -44,7 +46,12 @@ depend: $(DEPS)
 
 .PHONY: install
 install: $(OUT)/$(PLATFORM).bin
-	@install $(OUT)/$(PLATFORM).bin /bin/netcosm
+	@echo "INSTALL" $(PREFIX)/bin/netcosm
+	@install $(OUT)/$(PLATFORM).bin $(PREFIX)/bin/netcosm
+.PHONY: uninstall
+uninstall:
+	@echo "RM" $(PREFIX)/bin/netcosm
+	@rm -f $(PREFIX)/bin/netcosm
 
 .PHONY: clean
 clean:
@@ -63,10 +70,16 @@ veryclean: clean depclean
 .PHONY: help
 help:
 	@echo "Cleaning targets:"
-	@echo "  clean		- Remove object files"
-	@echo "  depclean	- Remove dependency files"
-	@echo "  veryclean	- Remove object and dependency files"
+	@echo "  clean			- Remove object files"
+	@echo "  depclean		- Remove dependency files"
+	@echo "  veryclean		- Remove object and dependency files"
+	@echo "Installation targets:"
+	@echo "  install		- Install to PREFIX/bin (default /usr/local)"
+	@echo "  uninstall		- Remove a previous installation"
 	@echo "Build targets:"
+	@echo "  all			- Build the binary"
+	@echo "  depend		- Regenerate dependencies"
+	@echo "  setcap		- Set CAP_NET_BIND_SERVICE on the binary"
 
 .PHONY: setcap
 setcap:

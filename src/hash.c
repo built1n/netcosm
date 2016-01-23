@@ -60,7 +60,7 @@ void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
                            int (*compare_keys)(const void*, const void*))
 {
     struct hash_map *ret = calloc(sizeof(struct hash_map), 1);
-    ret->table = calloc(sizeof(struct hash_node), sz);
+    ret->table = calloc(sz, sizeof(struct hash_node*));
     ret->table_sz = sz;
     ret->hash = hash_fn;
     ret->compare = compare_keys;

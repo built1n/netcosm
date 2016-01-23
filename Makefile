@@ -5,7 +5,7 @@ PLATFORM = unix
 NETCOSM_SRC = $(shell cat SOURCES)
 NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
-CFLAGS = -Og -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
+CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
 	-std=c99 -fno-strict-aliasing
 LDFLAGS = -lev -lssl -lcrypto
 

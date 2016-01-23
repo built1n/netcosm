@@ -152,7 +152,8 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
 
     memcpy(req, &our_pid, sizeof(pid_t));
     memcpy(req + sizeof(pid_t), &cmd, 1);
-    memcpy(req + sizeof(pid_t) + 1, data, sz);
+    if(data)
+        memcpy(req + sizeof(pid_t) + 1, data, sz);
 
     write(to_parent, req, 1 + sizeof(pid_t) + sz);
 
@@ -200,7 +201,7 @@ tryagain:
         poll(fds, ARRAYLEN(fds), -1);
         for(int i = 0; i < 2; ++i)
         {
-            if(fds[i].revents == POLLIN)
+            if(fds[i].revents & POLLIN)
             {
                 if(fds[i].fd == from_parent)
                 {
@@ -209,8 +210,8 @@ tryagain:
                 else if(fds[i].fd == client_fd)
                 {
                     ssize_t len = read(client_fd, buf + bufidx, BUFSZ - bufidx - 1);
-                    if(len < 0)
-                        error("lost connection");
+                    if(len <= 0)
+                        error("lost connection (%d)", fds[i].revents);
 
                     buf[BUFSZ - 1] = '\0';
 
@@ -252,18 +253,6 @@ char *client_read_password(void)
 
 enum reqdata_typespec reqdata_type = TYPE_NONE;
 union reqdata_t returned_reqdata;
-
-void read_string_max(int fd, char *buf, size_t max)
-{
-    size_t len;
-    if(read(fd, &len, sizeof(len)) != sizeof(len))
-        error("read_string_max");
-    if(len > max - 1)
-        error("read_string_max");
-    if(read(fd, buf, len) != (int)len)
-        error("unexpected EOF");
-    buf[max - 1] = '\0';
-}
 
 bool poll_requests(void)
 {

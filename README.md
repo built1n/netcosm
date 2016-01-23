@@ -1,11 +1,6 @@
 NetCosm
 =======
 
-<a href="https://scan.coverity.com/projects/theunamedguy-netcosm">
-  <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/7710/badge.svg"/>
-</a>
-
 NetCosm is currently under development. Things /WILL/ break, and
 features might drift out of existence without prior warning!
 

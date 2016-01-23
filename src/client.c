@@ -155,6 +155,7 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
     if(data)
         memcpy(req + sizeof(pid_t) + 1, data, sz);
 
+    assert(1 + sizeof(pid_t) + sz <= MSG_MAX);
     write(to_parent, req, 1 + sizeof(pid_t) + sz);
 
     /* poll till we get data */
@@ -278,8 +279,6 @@ bool poll_requests(void)
         got_cmd = true;
 
         unsigned char cmd = packet[0];
-
-        debugf("Child gets code %d\n", cmd);
 
         switch(cmd)
         {
@@ -658,6 +657,7 @@ auth:
             //}
         }
 
+        /* unprivileged commands */
         if(!strcmp(tok, "QUIT") || !strcmp(tok, "EXIT"))
         {
             free(cmd);

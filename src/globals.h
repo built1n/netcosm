@@ -26,6 +26,7 @@
 #include <openssl/opensslv.h>
 
 #include <arpa/inet.h>
+#include <arpa/telnet.h>
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>

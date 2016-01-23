@@ -175,7 +175,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
 
     for(unsigned i = 0; i < world_sz; ++i)
     {
-        world[i].users = hash_init((userdb_size() + 1) / 2, pid_hash, pid_equal);
+        world[i].users = hash_init((userdb_size() / 2) + 1, pid_hash, pid_equal);
 
         world[i].id = read_roomid(fd);
         memcpy(&world[i].data, data + i, sizeof(struct roomdata_t));
@@ -227,7 +227,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
             }
         }
 
-        world[i].users = hash_init((userdb_size() + 1) / 2, pid_hash, pid_equal);
+        world[i].users = hash_init((userdb_size() / 2) + 1, pid_hash, pid_equal);
 
         world_sz = i + 1;
     }

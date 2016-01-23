@@ -6,7 +6,7 @@ PREFIX = /usr/local
 NETCOSM_SRC = $(shell cat SOURCES)
 NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
 
-CFLAGS = -Og -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
+CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
 	-std=c99 -fno-strict-aliasing
 
 LDFLAGS = -lev -lcrypto
@@ -26,6 +26,7 @@ $(OUT)/$(PLATFORM).bin: $(NETCOSM_OBJ) $(HEADERS) Makefile
 	@mkdir -p $(OUT)
 	@echo "LD $@"
 	@$(CC) $(NETCOSM_OBJ) $(CFLAGS) -o $(OUT)/$(PLATFORM).bin $(LDFLAGS)
+	@make setcap
 
 # automatically generate dependency rules
 

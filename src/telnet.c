@@ -16,11 +16,11 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define TELCMDS
+#define TELOPTS
 #include "globals.h"
 
 #include "client.h"
-
-#define TELCMDS
 #include "telnet.h"
 
 static uint16_t term_width, term_height;
@@ -109,6 +109,7 @@ void telnet_echo_off(void)
 {
     const unsigned char seq[] = {
         IAC, WILL, TELOPT_ECHO,
+        IAC, DONT, TELOPT_ECHO,
     };
     out_raw(seq, ARRAYLEN(seq));
 }
@@ -117,6 +118,7 @@ void telnet_echo_on(void)
 {
     const unsigned char seq[] = {
         IAC, WONT, TELOPT_ECHO,
+        IAC, DO,   TELOPT_ECHO,
     };
     out_raw(seq, ARRAYLEN(seq));
 }

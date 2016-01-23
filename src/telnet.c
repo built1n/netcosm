@@ -91,12 +91,10 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
                     }
                     break;
                 }
-                goto got_cmd;
+                continue;
             }
         }
         debugf("%d ", c);
-    got_cmd:
-        ;
     }
 
     debugf("\n");

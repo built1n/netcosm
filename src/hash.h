@@ -41,8 +41,9 @@ void hash_setfreekey_cb(void*,  void (*cb)(void *key));
 void hash_free(void*);
 
 /*
- * insert a pair, returns NULL if NOT already found, otherwise returns
- * the existing data pointer without inserting the new pair
+ * insert a pair, returns NULL if NOT already found (a.k.a. success),
+ * otherwise returns the existing data pointer without inserting the
+ * new pair (a.k.a. failure)
  */
 void *hash_insert(void*, const void *key, const void *data);
 

@@ -108,8 +108,7 @@ bool userdb_remove(const char *key)
     return false;
 }
 
-/* should never fail, but could return NULL if something really weird
- * happens */
+/* returns NULL on success */
 struct userdata_t *userdb_add(struct userdata_t *data)
 {
     struct userdata_t *new = calloc(1, sizeof(*new)); /* only in C! */

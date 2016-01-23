@@ -22,16 +22,17 @@
 #include "server.h"
 #include "userdb.h"
 
+/* sends a single packet to a child, virtually guarantees receipt */
 static void send_packet(struct child_data *child, unsigned char cmd,
                         void *data, size_t datalen)
 {
     assert(datalen < MSG_MAX);
     unsigned char pkt[MSG_MAX];
     pkt[0] = cmd;
-    if(datalen)
+    if(data && datalen)
         memcpy(pkt + 1, data, datalen);
 tryagain:
-    if(write(child->outpipe[1], pkt, datalen + 1) < 0)
+    if(write(child->outpipe[1], pkt, (data?datalen:0) + 1) < 0)
     {
         /* write can fail, so we try again */
         if(errno == EAGAIN)
@@ -70,9 +71,9 @@ static void req_send_clientinfo(unsigned char *data, size_t datalen,
                  inet_ntoa(child->addr), child->pid, state[child->state]);
 
     if(sender->pid == child->pid)
-        strncat(buf, " [YOU]\n", sizeof(buf) - 1);
+        strncat(buf, " [YOU]\n", sizeof(buf) - strlen(buf) - 1);
     else
-        strncat(buf, "\n", sizeof(buf) - 1);
+        strncat(buf, "\n", sizeof(buf) - strlen(buf) - 1);
 
     send_packet(sender, REQ_BCASTMSG, buf, strlen(buf));
 }

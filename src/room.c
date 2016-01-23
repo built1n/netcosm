@@ -81,7 +81,10 @@ char *read_string(int fd)
     read(fd, &sz, sizeof(sz));
     char *ret = malloc(sz + 1);
     if(read(fd, ret, sz) < 0)
+    {
+        free(ret);
         return NULL;
+    }
     ret[sz] = '\0';
     return ret;
 }

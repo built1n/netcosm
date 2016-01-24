@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <arpa/telnet.h>
 #include <assert.h>
+#include <bsd/stdlib.h> // for arc4random
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -46,6 +47,7 @@
 #include <sys/ipc.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -89,4 +91,25 @@
 #define debugf(fmt,...) debugf_real(__func__, __LINE__, __FILE__, fmt, ##__VA_ARGS__)
 #else
 #define debugf(fmt,...) /* nop */
+#endif
+
+#if 0
+extern bool are_child;
+
+static void *logged_malloc(const char *func, int line, size_t sz)
+{
+    if(are_child)
+        debugf("%s:%d mallocs %d bytes\n", func, line, sz);
+    return malloc(sz);
+}
+
+static void *logged_calloc(const char *func, int line, size_t x, size_t y)
+{
+    if(are_child)
+        debugf("%s:%d callocs %dx%d bytes\n", func, line, x,y);
+    return calloc(x,y);
+}
+
+#define malloc(x) logged_malloc(__func__, __LINE__, x)
+#define calloc(x,y) logged_calloc(__func__, __LINE__, x,y)
 #endif

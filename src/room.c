@@ -42,17 +42,23 @@ bool room_user_add(room_id id, struct child_data *child)
     if(!room)
         error("unknown room %d", id);
 
-    if(hash_insert(room->users, &child->pid, child))
-        return false;
+    if(child->user)
+    {
+        /* hash_insert returns NULL on success */
+        return !hash_insert(room->users, child->user, child);
+    }
     else
-        return true;
+        return false;
 }
 
 bool room_user_del(room_id id, struct child_data *child)
 {
     struct room_t *room = room_get(id);
 
-    return hash_remove(room->users, &child->pid);
+    if(child->user)
+        return hash_remove(room->users, child->user);
+    else
+        return false;
 }
 
 void write_roomid(int fd, room_id *id)
@@ -116,6 +122,8 @@ static void room_free(struct room_t *room)
 {
     hash_free(room->users);
     room->users = NULL;
+    hash_free(room->objects);
+    room->objects = NULL;
     free(room->data.name);
     free(room->data.desc);
 }
@@ -135,8 +143,52 @@ void world_free(void)
     }
 }
 
-static SIMP_HASH(pid_t, pid_hash);
-static SIMP_EQUAL(pid_t, pid_equal);
+struct object_t *obj_new(void)
+{
+    struct object_t *new = calloc(1, sizeof(struct object_t));
+    /* generate a unique 128-bit id for this object */
+    /* 64 bits are used to store a nanosecond-resolution timestamp */
+    /* 64 random bits are also used */
+    uint64_t timestamp;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    timestamp = (obj_id)tv.tv_sec * (obj_id)1000000 + (obj_id)tv.tv_usec;
+
+    uint64_t rand_bits;
+    arc4random_buf(&rand_bits, sizeof(rand_bits));
+
+    new->id = ((obj_id)timestamp << 64) | (obj_id)rand_bits;
+
+    unsigned char bytes[16];
+    memcpy(bytes, &new->id, sizeof(bytes));
+    debugf("UUID: ");
+    for(unsigned i = 0; i < sizeof(bytes); ++i)
+    {
+        if(i == 4 || i == 6 || i == 8 || i == 10)
+            debugf("-");
+        debugf("%02x", bytes[15 - i]);
+    }
+    debugf("\n");
+
+    return new;
+}
+
+bool obj_add(room_id room, struct object_t *obj)
+{
+    return !hash_insert(room_get(room)->objects, &obj->id, obj);
+}
+
+static SIMP_HASH(obj_id, obj_hash);
+static SIMP_EQUAL(obj_id, obj_equal);
+
+#define OBJMAP_SIZE 8
+
+/* initialize the room's hash tables */
+static void room_init_maps(struct room_t *room)
+{
+    room->users = hash_init((userdb_size() / 2) + 1, hash_djb, compare_strings);
+    room->objects = hash_init(OBJMAP_SIZE, obj_hash, obj_equal);
+}
 
 /**
  * Loads a world using data on disk and in memory.
@@ -175,7 +227,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
 
     for(unsigned i = 0; i < world_sz; ++i)
     {
-        world[i].users = hash_init((userdb_size() / 2) + 1, pid_hash, pid_equal);
+        room_init_maps(world + i);
 
         world[i].id = read_roomid(fd);
         memcpy(&world[i].data, data + i, sizeof(struct roomdata_t));
@@ -200,7 +252,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
     world_sz = 0;
     world_name = strdup(name);
 
-    void *map = hash_init(1, hash_djb, compare_strings);
+    void *map = hash_init(sz / 2 + 1, hash_djb, compare_strings);
 
     for(size_t i = 0; i < sz; ++i)
     {
@@ -226,8 +278,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
                     world[i].adjacent[dir] = room->id;
             }
         }
-
-        world[i].users = hash_init((userdb_size() / 2) + 1, pid_hash, pid_equal);
+        room_init_maps(world + i);
 
         world_sz = i + 1;
     }

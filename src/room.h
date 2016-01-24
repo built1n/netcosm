@@ -48,7 +48,7 @@ struct roomdata_t {
 };
 
 struct object_t {
-    obj_id id;
+    obj_id id; // don't modify
 
     const char *name; /* no articles: "a", "an", "the" */
 
@@ -62,7 +62,7 @@ struct object_t {
     void (*hook_drop)(struct object_t*, user_t *user);
     void (*hook_use)(struct object_t*, user_t *user);
     void (*hook_destroy)(struct object_t*);
-    char* (*hook_desc)(struct object_t*, user_t*);
+    const char* (*hook_desc)(struct object_t*, user_t*);
 };
 
 struct verb_t {
@@ -79,9 +79,9 @@ struct room_t {
     room_id adjacent[NUM_DIRECTIONS];
 
     /* hash maps */
-    void *objects;
+    void *objects; /* obj_id -> object */
     void *verbs;
-    void *users; /* PID -> user_t */
+    void *users; /* username -> child_data */
 };
 
 /* room/world */
@@ -93,10 +93,10 @@ struct room_t *room_get(room_id id);
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
 
-/* returns a new object */
+/* returns a new object with a unique id */
 struct object_t *obj_new(void);
 
-/* new should point to a statically allocated object */
-void obj_add(room_id room, struct object_t *new);
+/* new should point to a new object allocated with obj_new */
+bool obj_add(room_id room, struct object_t *new);
 
 void world_free(void);

@@ -76,8 +76,11 @@ static void handle_disconnects(void)
     pid_t pid;
     while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
+        struct child_data *child = hash_lookup(child_map, &pid);
+
         debugf("Client disconnect.\n");
-        //struct child_data *child = hash_lookup(child_map, &pid);
+
+        room_user_del(child->room, child);
 
         --num_clients;
 
@@ -130,7 +133,7 @@ static void __attribute__((noreturn)) serv_cleanup(void)
 
     ev_default_destroy();
 
-    _exit(0);
+    exit(0);
 }
 
 static void __attribute__((noreturn)) sigint_handler(int s)
@@ -228,7 +231,7 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
 
     if(pipe2(readpipe, O_DIRECT) < 0)
         error("error creating pipe, need linux kernel >= 3.4");
-    if(pipe2(outpipe, O_NONBLOCK | O_DIRECT) < 0)
+    if(pipe2(outpipe, O_DIRECT) < 0)
         error("error creating pipe, need linux kernel >= 3.4");
 
     pid_t pid = fork();
@@ -281,6 +284,7 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
 
         ev_io *new_io_watcher = calloc(1, sizeof(ev_io));
         ev_io_init(new_io_watcher, childreq_cb, new->readpipe[0], EV_READ);
+        ev_set_priority(new_io_watcher, EV_MINPRI);
         ev_io_start(EV_A_ new_io_watcher);
         new->io_watcher = new_io_watcher;
 

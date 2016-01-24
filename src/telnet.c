@@ -42,8 +42,6 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
     bool in_sb = false;
     bool line_done = false;
 
-    debugf("telnet: ");
-
     for(unsigned i = 0; i < buflen; ++i)
     {
         unsigned char c = buf[i];
@@ -51,16 +49,12 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
         if(c == IAC)
             iac = true;
         else if(c == '\n' || c == '\r')
-        {
-            debugf("found newline, done reading.\n");
             line_done = true;
-        }
 
         if(iac)
         {
             if(TELCMD_OK(c))
             {
-                debugf("%s ", TELCMD(c));
                 found_cmd = true;
                 switch(c)
                 {
@@ -78,7 +72,7 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
                         while(j < 4 && i < buflen)
                         {
                             bytes[j++] = buf[++i];
-                            debugf("%d ", buf[j - 1]);
+                            //debugf("%d ", buf[j - 1]);
                             if(bytes[j - 1] == 255) /* 255 is doubled to distinguish from IAC */
                             {
                                 ++i;
@@ -94,12 +88,7 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
                 continue;
             }
         }
-        debugf("%d ", c);
     }
-
-    debugf("\n");
-    if(found_cmd)
-        debugf("telnet: is NOT data\n");
 
     return found_cmd ? TELNET_FOUNDCMD :
         (line_done ? TELNET_LINEOVER : TELNET_DATA);

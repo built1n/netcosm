@@ -1,12 +1,26 @@
 #include <world_api.h>
 
+const char *sword_desc(struct object_t *obj, user_t *user)
+{
+    return "It is very shiny.";
+}
+
+static void portal_init(room_id id)
+{
+    debugf("portal room init.\n");
+    struct object_t *new = obj_new();
+    new->name = "sword";
+    new->hook_desc = sword_desc;
+    obj_add(id, new);
+}
+
 const struct roomdata_t netcosm_world[] = {
     {
         "portal_room",
         "Portal Room",
         "You stand in the middle of a stone room. In to the east lies a portal to the world. Above it, there is a sign that reads `Alacron, 238 A.B.A.`.",
         { NONE_N, NONE_NE, "world_start", NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, "world_start", NONE_OT },
-        NULL,
+        portal_init,
         NULL,
         NULL,
     },

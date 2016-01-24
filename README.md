@@ -80,7 +80,11 @@ latency.
 ## Known Bugs
 
 * Telnet server implementation is not fully conforming
+
 * Initial account login time is bogus
+
+* Every subsequent connection allocates slightly more memory than the
+  last
 
 ## Versioning Scheme
 

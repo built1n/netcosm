@@ -71,7 +71,8 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
 
     /* do some line wrapping */
 
-    int pos = 0, last_space = 0;
+    static int pos = 0;
+    int last_space = 0;
     char *ptr = buf;
     uint16_t line_width = telnet_get_width() + 1;
     char *line_buf = malloc(line_width + 2);
@@ -168,8 +169,6 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
     while(!request_complete) poll_requests();
 
     free(req);
-
-    debugf("done with request\n");
 }
 
 #define BUFSZ 128
@@ -362,7 +361,7 @@ void client_change_room(room_id id)
 
 void *dir_map = NULL;
 
-void client_move(const char *dir)
+bool client_move(const char *dir)
 {
     const struct dir_pair {
         const char *text;
@@ -401,9 +400,16 @@ void client_move(const char *dir)
     if(pair)
     {
         send_master(REQ_MOVE, &pair->val, sizeof(pair->val));
+        if(reqdata_type == TYPE_BOOLEAN && returned_reqdata.boolean)
+            return true;
+        else
+            return false;
     }
     else
+    {
         out("Unknown direction.\n");
+        return false;
+    }
 }
 
 void client_look(void)
@@ -695,8 +701,8 @@ auth:
             if(dir)
             {
                 all_upper(dir);
-                client_move(dir);
-                client_look();
+                if(client_move(dir))
+                    client_look();
             }
             else
                 out("Expected direction after GO.\n");

@@ -156,7 +156,6 @@ struct userdata_t *userdb_request_lookup(const char *name)
     if(are_child)
     {
         send_master(REQ_GETUSERDATA, name, strlen(name) + 1);
-        debugf("returned reqdata is of type %d\n", reqdata_type);
         if(reqdata_type == TYPE_USERDATA)
             return &returned_reqdata.userdata;
         return NULL;

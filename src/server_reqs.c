@@ -29,6 +29,13 @@ static void send_packet(struct child_data *child, unsigned char cmd,
     assert(datalen < MSG_MAX);
     unsigned char pkt[MSG_MAX];
     pkt[0] = cmd;
+
+    //if((data?datalen:0) + 1 > MSG_MAX && cmd == REQ_BCASTMSG)
+    //{
+    //    /* TODO: split long messages */
+    //    ;
+    //}
+
     if(data && datalen)
         memcpy(pkt + 1, data, datalen);
 tryagain:
@@ -46,6 +53,8 @@ static void req_pass_msg(unsigned char *data, size_t datalen,
     (void) sender;
 
     send_packet(child, REQ_BCASTMSG, data, datalen);
+    if(child->pid != sender->pid)
+        send_packet(child, REQ_ALLDONE, NULL, 0);
 }
 
 static void req_send_clientinfo(unsigned char *data, size_t datalen,
@@ -84,8 +93,6 @@ static void req_change_state(unsigned char *data, size_t datalen,
     (void) data; (void) datalen; (void) child; (void) sender;
     if(datalen == sizeof(sender->state))
         sender->state = *((int*)data);
-    else
-        debugf("State data is of the wrong size %*s\n", datalen, data);
 }
 
 static void req_change_user(unsigned char *data, size_t datalen,
@@ -112,7 +119,7 @@ static void req_kick_client(unsigned char *data, size_t datalen,
     {
         pid_t kicked_pid = *((pid_t*)data);
         if(kicked_pid == child->pid)
-            send_packet(child, REQ_BCASTMSG, data + sizeof(pid_t), datalen - sizeof(pid_t));
+            send_packet(child, REQ_KICK, data + sizeof(pid_t), datalen - sizeof(pid_t));
     }
 }
 
@@ -127,6 +134,7 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
     (void) data; (void) datalen; (void) sender;
     struct room_t *room = room_get(sender->room);
     send_packet(sender, REQ_BCASTMSG, room->data.desc, strlen(room->data.desc));
+
 
     send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
 }
@@ -189,10 +197,7 @@ static void req_send_user(unsigned char *data, size_t datalen, struct child_data
         }
 
         debugf("looking up user %s failed\n", data);
-        debugf("failure 2\n");
     }
-
-    debugf("failure 1\n");
 }
 
 static void req_del_user(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -298,20 +303,23 @@ void reqmap_free(void)
  * 7. Parent spins until the needed number of signals is reached.
  */
 
+static unsigned char packet[MSG_MAX + 1];
+
 bool handle_child_req(int in_fd)
 {
-    unsigned char packet[MSG_MAX + 1];
-
     ssize_t packet_len = read(in_fd, packet, MSG_MAX);
+
+    if((size_t)packet_len < sizeof(pid_t) + 1)
+    {
+        /* the pipe is probably broken (i.e. disconnect), so we don't
+         * try to send a reply */
+        return false;
+    }
 
     struct child_data *sender = NULL;
 
-    if(packet_len <= 0)
-        goto fail;
-
     pid_t sender_pid;
     memcpy(&sender_pid, packet, sizeof(pid_t));
-    debugf("servreq: Got request from PID %d\n", sender_pid);
 
     sender = hash_lookup(child_map, &sender_pid);
 
@@ -327,6 +335,8 @@ bool handle_child_req(int in_fd)
     size_t datalen = packet_len - sizeof(pid_t) - 1;
 
     struct child_request *req = hash_lookup(request_map, &cmd);
+
+    debugf("Child %d sends request %d\n", sender_pid, cmd);
 
     if(!req)
     {
@@ -360,8 +370,6 @@ bool handle_child_req(int in_fd)
         if(child->pid == sender->pid)
             continue;
 
-        debugf("iterating over child %d\n", child->pid);
-
         switch(req->which)
         {
         case CHILD_ALL:
@@ -375,19 +383,14 @@ bool handle_child_req(int in_fd)
 
 finish:
 
-    debugf("finalizing request\n");
-
     if(req && req->finalize)
         req->finalize(data, datalen, sender);
 
     /* fall through */
 fail:
-    if(sender)
-    {
-        send_packet(sender, REQ_ALLDONE, NULL, 0);
 
-        debugf("sending all done code\n");
-    }
+    if(sender)
+        send_packet(sender, REQ_ALLDONE, NULL, 0);
 
     return true;
 }

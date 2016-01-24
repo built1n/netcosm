@@ -1,88 +1,72 @@
 CC = cc
-OUT = build
+BUILDDIR = build
 PLATFORM = unix
+OUT = $(BUILDDIR)/$(PLATFORM).bin
 PREFIX = /usr/local
 
-NETCOSM_SRC = $(shell cat SOURCES)
-NETCOSM_OBJ := $(NETCOSM_SRC:.c=.o)
+SRC = $(shell cat SOURCES)
+OBJ = $(patsubst %.c,$(BUILDDIR)/%.o,$(SRC))
 
-CFLAGS = -O3 -g -I src/ -I export/include -Wall -Wextra -Wshadow	\
-	-std=c99 -fno-strict-aliasing
+INCLUDES = -I src/ -I export/include/
 
-LDFLAGS = -lev -lcrypto
+WARNFLAGS = -Wall -Wextra -Wshadow -fno-strict-aliasing
+
+OPTFLAGS = -O3
+DEBUGFLAGS = -g
+
+CFLAGS = $(OPTFLAGS) $(DEBUGFLAGS) $(WARNFLAGS) -std=c99 $(INCLUDES)
+
+LDFLAGS = -lev -lcrypto -lbsd
 
 HEADERS = src/*.h export/include/*.h
 
-DEPS = $(NETCOSM_SRC:.c=.d)
+DEPS = $(patsubst %.c,$(BUILDDIR)/%.d,$(SRC))
+
+################################################################################
 
 .PHONY: all
-all: $(OUT)/$(PLATFORM).bin
+all: | $(OUT)
 
-%.o: %.c Makefile %.d
-	@echo "CC $<"
-	@$(CC) $(CFLAGS) $(OPTFLAGS) -c $< -o $@
-
-$(OUT)/$(PLATFORM).bin: $(NETCOSM_OBJ) $(HEADERS) Makefile
-	@mkdir -p $(OUT)
+$(OUT): $(OBJ)
 	@echo "LD $@"
-	@$(CC) $(NETCOSM_OBJ) $(CFLAGS) -o $(OUT)/$(PLATFORM).bin $(LDFLAGS)
-	@make setcap
+	@$(CC) $(OBJ) $(CFLAGS) -o $@ $(LDFLAGS)
 
-# automatically generate dependency rules
+$(OBJ): | $(BUILDDIR)
 
-%.d : %.c
+$(BUILDDIR):
+	@mkdir -p $(BUILDDIR)
+
+$(BUILDDIR)/%.o: %.c $(BUILDDIR)/%.d Makefile
+	@echo "CC $<"
+	@mkdir -p `dirname $@`
+	@$(CC) -c $< $(CFLAGS) -o $@
+
+################################################################################
+
+.PRECIOUS: $(BUILDDIR)/%.d
+$(BUILDDIR)/%.d: %.c
+	@mkdir -p `dirname $@`
 	@$(CC) $(CCFLAGS) -MF"$@" -MG -MM -MP -MT"$@" -MT"$(<:.c=.o)" "$<"
-
-# -MF  write the generated dependency rule to a file
-# -MG  assume missing headers will be generated and don't stop with an error
-# -MM  generate dependency rule for prerequisite, skipping system headers
-# -MP  add phony target for each header to prevent errors when header is missing
-# -MT  add a target to the generated dependency
 
 -include $(DEPS)
 
-.PHONY: depend
-depend: $(DEPS)
-	@echo "Dependencies (re)generated."
+################################################################################
 
-.PHONY: install
-install: $(OUT)/$(PLATFORM).bin
-	@echo "INSTALL" $(PREFIX)/bin/netcosm
-	@install $(OUT)/$(PLATFORM).bin $(PREFIX)/bin/netcosm
-.PHONY: uninstall
-uninstall:
-	@echo "RM" $(PREFIX)/bin/netcosm
-	@rm -f $(PREFIX)/bin/netcosm
+.PHONY: setcap
+setcap:
+	@echo "Setting CAP_NET_BIND_SERVICE on $(OUT)..."
+	@sudo setcap 'cap_net_bind_service=+ep' "$(OUT)"
 
 .PHONY: clean
 clean:
 	@echo "Cleaning build directory..."
-	@rm -f $(OUT)/$(PLATFORM).bin
-	@rm -f $(NETCOSM_OBJ)
-
-.PHONY: depclean
-depclean:
-	@echo "Cleaning dependencies..."
-	@rm -f $(DEPS)
+	@rm -f $(OBJ) $(OUT)
 
 .PHONY: veryclean
-veryclean: clean depclean
+veryclean:
+	@echo "Removing build directory..."
+	@rm -rf $(BUILDDIR)
 
-.PHONY: help
-help:
-	@echo "Cleaning targets:"
-	@echo "  clean			- Remove object files"
-	@echo "  depclean		- Remove dependency files"
-	@echo "  veryclean		- Remove object and dependency files"
-	@echo "Installation targets:"
-	@echo "  install		- Install to PREFIX/bin (default /usr/local)"
-	@echo "  uninstall		- Remove a previous installation"
-	@echo "Build targets:"
-	@echo "  all			- Build the binary"
-	@echo "  depend		- Regenerate dependencies"
-	@echo "  setcap		- Set CAP_NET_BIND_SERVICE on the binary"
-
-.PHONY: setcap
-setcap:
-	@echo "Enabling CAP_NET_BIND_SERVICE on "$(OUT)/$(PLATFORM).bin"..."
-	@sudo setcap 'cap_net_bind_service=+ep' $(OUT)/$(PLATFORM).bin
+.PHONY: depend
+depend: $(DEPS)
+	@echo "Dependencies (re)generated."

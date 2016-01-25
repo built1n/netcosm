@@ -8,7 +8,8 @@ features might drift out of existence without prior warning!
 
 ### Prerequisites:
 
-* openssl
+* openssl (for password hashing)
+* libbsd (for arc4random, strlcpy, etc.)
 * libev
 * linux >= 3.4 (for "packet mode" pipes)
 * glibc >= 2.9

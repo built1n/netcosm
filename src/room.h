@@ -25,7 +25,11 @@
 
 typedef enum room_id { ROOM_NONE = -1 } room_id;
 
-typedef unsigned __int128 obj_id;
+typedef struct int128 {
+    uint64_t halves[2];
+} int128;
+
+typedef int128 obj_id;
 
 typedef struct child_data user_t;
 
@@ -58,7 +62,7 @@ struct object_t {
     bool list;
 
     void (*hook_serialize)(int fd, struct object_t*);
-    void (*hook_take)(struct object_t*, user_t *user);
+    bool (*hook_take)(struct object_t*, user_t *user);
     void (*hook_drop)(struct object_t*, user_t *user);
     void (*hook_use)(struct object_t*, user_t *user);
     void (*hook_destroy)(struct object_t*);
@@ -79,7 +83,7 @@ struct room_t {
     room_id adjacent[NUM_DIRECTIONS];
 
     /* hash maps */
-    void *objects; /* obj_id -> object */
+    void *objects; /* object name -> object */
     void *verbs;
     void *users; /* username -> child_data */
 };
@@ -96,7 +100,17 @@ bool room_user_del(room_id id, struct child_data *child);
 /* returns a new object with a unique id */
 struct object_t *obj_new(void);
 
-/* new should point to a new object allocated with obj_new */
-bool obj_add(room_id room, struct object_t *new);
+/* new should point to a new object allocated with obj_new(), with
+ * 'name' properly set */
+bool obj_add(room_id room, struct object_t *obj);
+
+/* on the first call, room should be a valid room id, and *save should
+ * point to a void pointer. On subsequent calls, room should be
+ * ROOM_NONE, and *save should remain unchanged from the previous
+ * call */
+struct object_t *room_obj_iterate(room_id room, void **save);
+
+/* obj should be all lowercase */
+struct object_t *room_obj_get(room_id room, const char *obj);
 
 void world_free(void);

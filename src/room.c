@@ -145,41 +145,28 @@ void world_free(void)
 
 struct object_t *obj_new(void)
 {
-    struct object_t *new = calloc(1, sizeof(struct object_t));
+    struct object_t *obj = calloc(1, sizeof(struct object_t));
     /* generate a unique 128-bit id for this object */
     /* 64 bits are used to store a nanosecond-resolution timestamp */
     /* 64 random bits are also used */
     uint64_t timestamp;
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    timestamp = (obj_id)tv.tv_sec * (obj_id)1000000 + (obj_id)tv.tv_usec;
+    timestamp = (uint64_t)tv.tv_sec * (uint64_t)1000000 + (uint64_t)tv.tv_usec;
 
     uint64_t rand_bits;
     arc4random_buf(&rand_bits, sizeof(rand_bits));
 
-    new->id = ((obj_id)timestamp << 64) | (obj_id)rand_bits;
+    obj->id.halves[0] = timestamp;
+    obj->id.halves[1] = rand_bits;
 
-    unsigned char bytes[16];
-    memcpy(bytes, &new->id, sizeof(bytes));
-    debugf("UUID: ");
-    for(unsigned i = 0; i < sizeof(bytes); ++i)
-    {
-        if(i == 4 || i == 6 || i == 8 || i == 10)
-            debugf("-");
-        debugf("%02x", bytes[15 - i]);
-    }
-    debugf("\n");
-
-    return new;
+    return obj;
 }
 
 bool obj_add(room_id room, struct object_t *obj)
 {
-    return !hash_insert(room_get(room)->objects, &obj->id, obj);
+    return !hash_insert(room_get(room)->objects, obj->name, obj);
 }
-
-static SIMP_HASH(obj_id, obj_hash);
-static SIMP_EQUAL(obj_id, obj_equal);
 
 #define OBJMAP_SIZE 8
 
@@ -187,7 +174,7 @@ static SIMP_EQUAL(obj_id, obj_equal);
 static void room_init_maps(struct room_t *room)
 {
     room->users = hash_init((userdb_size() / 2) + 1, hash_djb, compare_strings);
-    room->objects = hash_init(OBJMAP_SIZE, obj_hash, obj_equal);
+    room->objects = hash_init(OBJMAP_SIZE, hash_djb, compare_strings);
 }
 
 /**
@@ -348,4 +335,17 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
     hash_free(dir_map);
 
     hash_free(map);
+}
+
+struct object_t *room_obj_iterate(room_id room, void **save)
+{
+    if(room != ROOM_NONE)
+        return hash_iterate(room_get(room)->objects, save, NULL);
+    else
+        return hash_iterate(NULL, save, NULL);
+}
+
+struct object_t *room_obj_get(room_id room, const char *name)
+{
+    return hash_lookup(room_get(room)->objects, name);
 }

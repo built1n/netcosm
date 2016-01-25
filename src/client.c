@@ -419,6 +419,12 @@ void client_look(void)
     send_master(REQ_GETROOMDESC, NULL, 0);
 }
 
+void client_look_at(char *obj)
+{
+    all_lower(obj);
+    send_master(REQ_LOOKAT, obj, strlen(obj) + 1);
+}
+
 #define WSPACE " \t\r\n"
 
 void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
@@ -689,7 +695,13 @@ auth:
         }
         else if(!strcmp(tok, "LOOK"))
         {
-            client_look();
+            char *what = strtok_r(NULL, " ", &save);
+            if(!what)
+                client_look();
+            else
+            {
+                client_look_at(what);
+            }
         }
         else if(!strcmp(tok, "WAIT"))
         {

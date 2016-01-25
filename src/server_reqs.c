@@ -135,8 +135,25 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
     struct room_t *room = room_get(sender->room);
     send_packet(sender, REQ_BCASTMSG, room->data.desc, strlen(room->data.desc));
 
-
     send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
+
+    /* list objects */
+    char buf[MSG_MAX];
+    buf[0] = 0;
+    void *save = NULL;
+    room_id id = sender->room;
+    while(1)
+    {
+        struct object_t *obj = room_obj_iterate(id, &save);
+        id = ROOM_NONE;
+        if(!obj)
+            break;
+        strlcat(buf, "There is a(n) ", sizeof(buf));
+        strlcat(buf, obj->name, sizeof(buf));
+        strlcat(buf, " here.\n", sizeof(buf));
+    }
+
+    send_packet(sender, REQ_BCASTMSG, buf, strlen(buf));
 }
 
 static void req_send_roomname(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -236,6 +253,23 @@ static void req_kick_always(unsigned char *data, size_t datalen,
     send_packet(child, REQ_KICK, data, datalen);
 }
 
+static void req_look_at(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) datalen;
+    struct object_t *obj = room_obj_get(sender->room, (const char*)data);
+    if(obj)
+    {
+        const char *desc = obj->hook_desc(obj, sender);
+        send_packet(sender, REQ_BCASTMSG, (void*)desc, strlen(desc));
+        send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
+    }
+    else
+    {
+        const char *msg = "I don't know what that is.\n";
+        send_packet(sender, REQ_BCASTMSG, (void*)msg, strlen(msg));
+    }
+}
+
 static const struct child_request {
     unsigned char code;
 
@@ -264,7 +298,8 @@ static const struct child_request {
     { REQ_GETUSERDATA, true,  CHILD_NONE,           NULL,                req_send_user,     },
     { REQ_DELUSERDATA, true,  CHILD_NONE,           NULL,                req_del_user,      },
     { REQ_ADDUSERDATA, true,  CHILD_NONE,           NULL,                req_add_user,      },
-    { REQ_KICKALL,     true,  CHILD_ALL_BUT_SENDER, req_kick_always,     NULL               },
+    { REQ_KICKALL,     true,  CHILD_ALL_BUT_SENDER, req_kick_always,     NULL,              },
+    { REQ_LOOKAT,      true,  CHILD_NONE,           NULL,                req_look_at,       },
     //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,           },
 };
 

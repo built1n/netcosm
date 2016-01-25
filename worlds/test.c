@@ -8,9 +8,8 @@ const char *sword_desc(struct object_t *obj, user_t *user)
 static void portal_init(room_id id)
 {
     debugf("portal room init.\n");
-    struct object_t *new = obj_new();
+    struct object_t *new = obj_new("weapon");
     new->name = "sword";
-    new->hook_desc = sword_desc;
     obj_add(id, new);
 }
 
@@ -78,3 +77,25 @@ const struct roomdata_t netcosm_world[] = {
 
 const size_t netcosm_world_sz = ARRAYLEN(netcosm_world);
 const char *netcosm_world_name = "Alacron 0.1";
+
+/************ OBJECT DEFINITIONS ************/
+
+const char *shiny(struct object_t *obj, user_t *user)
+{
+    if(user->state == STATE_ADMIN)
+        return "It's VERRRYYY SHIIINNNNYYYY!!!!";
+    else
+        return "It's kinda shiny.";
+}
+
+const struct obj_class_t netcosm_obj_classes[] = {
+    { "weapon",
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      shiny },
+};
+
+const size_t netcosm_obj_classes_sz = ARRAYLEN(netcosm_obj_classes);

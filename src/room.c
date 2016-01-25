@@ -143,24 +143,37 @@ void world_free(void)
     }
 }
 
-struct object_t *obj_new(void)
+/* map of class names -> object classes */
+static void *obj_class_map = NULL;
+
+struct object_t *obj_new(const char *class_name)
 {
+    if(!obj_class_map)
+    {
+        extern const struct obj_class_t netcosm_obj_classes[];
+        extern const size_t netcosm_obj_classes_sz;
+        obj_class_map = hash_init(netcosm_obj_classes_sz / 2 + 1,
+                                  hash_djb,
+                                  compare_strings);
+        for(unsigned i = 0; i < netcosm_obj_classes_sz; ++i)
+        {
+            if(hash_insert(obj_class_map,
+                           netcosm_obj_classes[i].class_name,
+                           netcosm_obj_classes + i))
+                error("duplicate object class name");
+        }
+    }
+
     struct object_t *obj = calloc(1, sizeof(struct object_t));
-    /* generate a unique 128-bit id for this object */
-    /* 64 bits are used to store a nanosecond-resolution timestamp */
-    /* 64 random bits are also used */
-    uint64_t timestamp;
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    timestamp = (uint64_t)tv.tv_sec * (uint64_t)1000000 + (uint64_t)tv.tv_usec;
 
-    uint64_t rand_bits;
-    arc4random_buf(&rand_bits, sizeof(rand_bits));
-
-    obj->id.halves[0] = timestamp;
-    obj->id.halves[1] = rand_bits;
-
-    return obj;
+    obj->class = hash_lookup(obj_class_map, class_name);
+    if(!obj->class)
+    {
+        free(obj);
+        return NULL;
+    }
+    else
+        return obj;
 }
 
 bool obj_add(room_id room, struct object_t *obj)

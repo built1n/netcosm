@@ -25,41 +25,19 @@
 
 typedef enum room_id { ROOM_NONE = -1 } room_id;
 
-typedef struct int128 {
-    uint64_t halves[2];
-} int128;
-
-typedef int128 obj_id;
-
 typedef struct child_data user_t;
 
 enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
 
-/* the data we get from a world module */
-struct roomdata_t {
-    /* the non-const pointers can be modified by the world module */
-    const char * const uniq_id;
+/* Objects belong to an object class. Objects define their object
+ * class through the class name, which is converted to a class ID
+ * internally.
+ */
 
-    /* mutable properties */
-    char *name;
-    char *desc;
+struct object_t;
 
-    const char * const adjacent[NUM_DIRECTIONS];
-
-    void (* const hook_init)(room_id id);
-    void (* const hook_enter)(room_id room, user_t *user);
-    void (* const hook_leave)(room_id room, user_t *user);
-};
-
-struct object_t {
-    obj_id id; // don't modify
-
-    const char *name; /* no articles: "a", "an", "the" */
-
-    void *userdata;
-
-    bool can_take;
-    bool list;
+struct obj_class_t {
+    const char *class_name;
 
     void (*hook_serialize)(int fd, struct object_t*);
     bool (*hook_take)(struct object_t*, user_t *user);
@@ -67,6 +45,33 @@ struct object_t {
     void (*hook_use)(struct object_t*, user_t *user);
     void (*hook_destroy)(struct object_t*);
     const char* (*hook_desc)(struct object_t*, user_t*);
+};
+
+struct object_t {
+    struct obj_class_t *class;
+
+    const char *name; /* no articles: "a", "an", "the" */
+
+    void *userdata;
+
+    bool can_take;
+    bool list;
+};
+
+/* the data we get from a world module */
+struct roomdata_t {
+    /* the non-const pointers can be modified by the world module */
+    const char * const uniq_id;
+
+    /* mutable properties */
+    const char *name;
+    const char *desc;
+
+    const char * const adjacent[NUM_DIRECTIONS];
+
+    void (* const hook_init)(room_id id);
+    void (* const hook_enter)(room_id room, user_t *user);
+    void (* const hook_leave)(room_id room, user_t *user);
 };
 
 struct verb_t {
@@ -97,8 +102,8 @@ struct room_t *room_get(room_id id);
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
 
-/* returns a new object with a unique id */
-struct object_t *obj_new(void);
+/* returns a new object of class 'c' */
+struct object_t *obj_new(const char *c);
 
 /* new should point to a new object allocated with obj_new(), with
  * 'name' properly set */

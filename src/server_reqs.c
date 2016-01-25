@@ -24,7 +24,7 @@
 
 /* sends a single packet to a child, virtually guarantees receipt */
 static void send_packet(struct child_data *child, unsigned char cmd,
-                        void *data, size_t datalen)
+                        const void *data, size_t datalen)
 {
     assert(datalen < MSG_MAX);
     unsigned char pkt[MSG_MAX];
@@ -133,7 +133,7 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
 {
     (void) data; (void) datalen; (void) sender;
     struct room_t *room = room_get(sender->room);
-    send_packet(sender, REQ_BCASTMSG, room->data.desc, strlen(room->data.desc));
+    send_packet(sender, REQ_BCASTMSG, (void*)room->data.desc, strlen(room->data.desc));
 
     send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
 
@@ -259,7 +259,7 @@ static void req_look_at(unsigned char *data, size_t datalen, struct child_data *
     struct object_t *obj = room_obj_get(sender->room, (const char*)data);
     if(obj)
     {
-        const char *desc = obj->hook_desc(obj, sender);
+        const char *desc = obj->class->hook_desc(obj, sender);
         send_packet(sender, REQ_BCASTMSG, (void*)desc, strlen(desc));
         send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
     }

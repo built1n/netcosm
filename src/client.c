@@ -425,6 +425,17 @@ void client_look_at(char *obj)
     send_master(REQ_LOOKAT, obj, strlen(obj) + 1);
 }
 
+void client_take(char *obj)
+{
+    all_lower(obj);
+    send_master(REQ_TAKE, obj, strlen(obj) + 1);
+}
+
+void client_inventory(void)
+{
+    send_master(REQ_PRINTINVENTORY, NULL, 0);
+}
+
 #define WSPACE " \t\r\n"
 
 void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
@@ -702,6 +713,15 @@ auth:
             {
                 client_look_at(what);
             }
+        }
+        else if(!strcmp(tok, "INVENTORY"))
+        {
+            client_inventory();
+        }
+        else if(!strcmp(tok, "TAKE"))
+        {
+            char *what = strtok_r(NULL, " ", &save);
+            client_take(what);
         }
         else if(!strcmp(tok, "WAIT"))
         {

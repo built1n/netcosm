@@ -26,51 +26,58 @@
 static void *map = NULL;
 static char *db_file = NULL;
 
+static void free_userdata(void *ptr)
+{
+    struct userdata_t *data = ptr;
+    hash_free(data->objects);
+    free(data);
+}
+
 /*
- * the user DB is stored on disk as an ASCII database
+ * the user DB is stored on disk as an binary flat file
  *
  * this is then loaded into fixed-sized hash map at init
- * TODO: implement with B-tree
+ * TODO: re-implement with B-tree
  */
 void userdb_init(const char *file)
 {
     db_file = strdup(file);
 
-    /* FILE* for getline() */
-    FILE *f = fopen(file, "r");
+    int fd = open(file, O_RDONLY);
     map = hash_init(256, hash_djb, compare_strings);
-    hash_setfreedata_cb(map, free);
+    hash_setfreedata_cb(map, free_userdata);
 
-    char *format;
-    asprintf(&format, "%%%d[a-z0-9 ]:%%%d[A-Z]:%%%ds:%%d:%%ld\n",
-             MAX_NAME_LEN, SALT_LEN, AUTH_HASHLEN * 2);
-
-    if(f)
+    /* 0 is a valid fd */
+    if(fd >= 0)
     {
         while(1)
         {
             struct userdata_t *data = calloc(1, sizeof(*data));
 
-            int ret = fscanf(f, format,
-                             data->username,
-                             data->salt,
-                             data->passhash,
-                             &data->priv,
-                             &data->last_login);
-
-            if(ret != 5)
-            {
-                free(data);
+            if(read(fd, data, sizeof(*data)) != sizeof(*data))
                 break;
+
+            size_t n_objects;
+            if(read(fd, &n_objects, sizeof(n_objects)) != sizeof(n_objects))
+                break;
+
+            data->objects = hash_init(MIN(8, n_objects),
+                                      hash_djb,
+                                      compare_strings);
+
+            debugf("READING %d OBJECTS INTO INVENTORY\n", n_objects);
+
+            for(unsigned i = 0; i < n_objects; ++i)
+            {
+                struct object_t *obj = obj_read(fd);
+                hash_insert(data->objects, obj->name, obj);
             }
 
             hash_insert(map, data->username, data);
         }
 
-        fclose(f);
+        close(fd);
     }
-
-    free(format);
 }
 
 void userdb_write(const char *file)
@@ -83,12 +90,34 @@ void userdb_write(const char *file)
         ptr = NULL;
         if(!user)
             break;
-        dprintf(fd, "%s:%*s:%*s:%d:%ld\n",
-                user->username,
-                SALT_LEN, user->salt,
-                AUTH_HASHLEN*2, user->passhash,
-                user->priv,
-                user->last_login);
+
+        write(fd, user, sizeof(*user));
+
+        size_t n_objects;
+        if(user->objects)
+            n_objects = hash_size(user->objects);
+        else
+            n_objects = 0;
+
+        write(fd, &n_objects, sizeof(n_objects));
+
+        debugf("WRITING %d OBJECTS\n", n_objects);
+
+        /* write objects */
+
+        if(n_objects)
+        {
+            void *objptr = user->objects, *objsave;
+            while(1)
+            {
+                struct object_t *obj = hash_iterate(objptr, &objsave, NULL);
+                if(!obj)
+                    break;
+                objptr = NULL;
+                debugf("WRITING OBJECT %s\n", obj->name);
+                obj_write(fd, obj);
+            }
+        }
     }
     close(fd);
 }
@@ -114,6 +143,13 @@ struct userdata_t *userdb_add(struct userdata_t *data)
     struct userdata_t *new = calloc(1, sizeof(*new)); /* only in C! */
     memcpy(new, data, sizeof(*new));
 
+    /* don't overwrite their inventory */
+    struct userdata_t *old = userdb_lookup(new->username);
+    if(old && old->objects)
+        new->objects = hash_dup(old->objects);
+    else
+        new->objects = hash_init(8, hash_djb, compare_strings);
+
     struct userdata_t *ret;
 
     if((ret = hash_insert(map, new->username, new))) /* already exists */
@@ -129,7 +165,7 @@ struct userdata_t *userdb_add(struct userdata_t *data)
 
 void userdb_shutdown(void)
 {
-    if(map && db_file)
+    if(map && db_file && !are_child)
         userdb_write(db_file);
     if(map)
     {

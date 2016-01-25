@@ -260,3 +260,26 @@ size_t hash_size(void *ptr)
     struct hash_map *map = ptr;
     return map->n_entries;
 }
+
+void *hash_dup(void *ptr)
+{
+    struct hash_map *map = ptr;
+
+    struct hash_map *ret = calloc(1, sizeof(struct hash_map));
+    memcpy(ret, map, sizeof(*ret));
+
+    ret->table = calloc(ret->table_sz, sizeof(struct hash_node*));
+    ret->n_entries = 0;
+
+    void *save;
+    while(1)
+    {
+        void *key;
+        void *data = hash_iterate(ptr, &save, &key);
+        if(!data)
+            break;
+        ptr = NULL;
+        hash_insert(ret, key, data);
+    }
+    return ret;
+}

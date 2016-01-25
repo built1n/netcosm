@@ -2,6 +2,7 @@ src/auth.c
 src/client.c
 src/hash.c
 src/main.c
+src/obj.c
 src/room.c
 src/server.c
 src/server_reqs.c

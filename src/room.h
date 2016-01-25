@@ -40,6 +40,7 @@ struct obj_class_t {
     const char *class_name;
 
     void (*hook_serialize)(int fd, struct object_t*);
+    void (*hook_deserialize)(int fd, struct object_t*);
     bool (*hook_take)(struct object_t*, user_t *user);
     void (*hook_drop)(struct object_t*, user_t *user);
     void (*hook_use)(struct object_t*, user_t *user);
@@ -52,10 +53,10 @@ struct object_t {
 
     const char *name; /* no articles: "a", "an", "the" */
 
-    void *userdata;
-
     bool can_take;
     bool list;
+
+    void *userdata;
 };
 
 /* the data we get from a world module */
@@ -64,8 +65,8 @@ struct roomdata_t {
     const char * const uniq_id;
 
     /* mutable properties */
-    const char *name;
-    const char *desc;
+    char *name;
+    char *desc;
 
     const char * const adjacent[NUM_DIRECTIONS];
 
@@ -117,5 +118,7 @@ struct object_t *room_obj_iterate(room_id room, void **save);
 
 /* obj should be all lowercase */
 struct object_t *room_obj_get(room_id room, const char *obj);
+
+size_t room_obj_count(room_id room);
 
 void world_free(void);

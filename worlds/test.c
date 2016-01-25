@@ -10,6 +10,10 @@ static void portal_init(room_id id)
     debugf("portal room init.\n");
     struct object_t *new = obj_new("weapon");
     new->name = "sword";
+    new->list = true;
+    new->userdata = malloc(sizeof(double));
+    double p = 3.14159265358979323846L;
+    memcpy(new->userdata, &p, sizeof(p));
     obj_add(id, new);
 }
 
@@ -83,14 +87,31 @@ const char *netcosm_world_name = "Alacron 0.1";
 const char *shiny(struct object_t *obj, user_t *user)
 {
     if(user->state == STATE_ADMIN)
-        return "It's VERRRYYY SHIIINNNNYYYY!!!!";
+    {
+        static char buf[128];
+        double *d = obj->userdata;
+        snprintf(buf, sizeof(buf), "It has %f written on it.", *d);
+        return buf;
+    }
     else
         return "It's kinda shiny.";
 }
 
+void weap_serialize(int fd, struct object_t *obj)
+{
+    write(fd, obj->userdata, sizeof(double));
+}
+
+void weap_deserialize(int fd, struct object_t *obj)
+{
+    obj->userdata = malloc(sizeof(double));
+    read(fd, obj->userdata, sizeof(double));
+}
+
 const struct obj_class_t netcosm_obj_classes[] = {
     { "weapon",
-      NULL,
+      weap_serialize,
+      weap_deserialize,
       NULL,
       NULL,
       NULL,

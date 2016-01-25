@@ -148,6 +148,8 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
         id = ROOM_NONE;
         if(!obj)
             break;
+        if(!obj->list)
+            continue;
         strlcat(buf, "There is a(n) ", sizeof(buf));
         strlcat(buf, obj->name, sizeof(buf));
         strlcat(buf, " here.\n", sizeof(buf));

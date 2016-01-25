@@ -1,0 +1,7 @@
+language: c
+before-install:
+ - sudo apt-get -y install libbsd libev
+install:
+ - make
+ - ./build/unix.bin &
+

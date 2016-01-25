@@ -39,6 +39,8 @@
 #define REQ_ALLDONE           17 /* child: break out of send_master() */
 #define REQ_KICKALL           18 /* server: kick everyone except the sender */
 #define REQ_LOOKAT            19 /* server: send object description */
+#define REQ_TAKE              20 /* server: add object to user inventory */
+#define REQ_PRINTINVENTORY    21 /* server: print user inventory */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */

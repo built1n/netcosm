@@ -61,40 +61,6 @@ bool room_user_del(room_id id, struct child_data *child)
         return false;
 }
 
-void write_roomid(int fd, room_id *id)
-{
-    write(fd, id, sizeof(*id));
-}
-
-void write_string(int fd, const char *str)
-{
-    size_t len = strlen(str);
-    write(fd, &len, sizeof(len));
-    write(fd, str, len);
-}
-
-room_id read_roomid(int fd)
-{
-    room_id ret;
-    if(read(fd, &ret, sizeof(ret)) < 0)
-        return ROOM_NONE;
-    return ret;
-}
-
-char *read_string(int fd)
-{
-    size_t sz;
-    read(fd, &sz, sizeof(sz));
-    char *ret = malloc(sz + 1);
-    if(read(fd, ret, sz) < 0)
-    {
-        free(ret);
-        return NULL;
-    }
-    ret[sz] = '\0';
-    return ret;
-}
-
 void world_save(const char *fname)
 {
     int fd = open(fname, O_CREAT | O_WRONLY, 0644);
@@ -129,13 +95,6 @@ void world_save(const char *fname)
                 break;
             id = ROOM_NONE;
 
-            write_string(fd, obj->class->class_name);
-            write_string(fd, obj->name);
-            write(fd, &obj->can_take, sizeof(obj->can_take));
-            write(fd, &obj->list, sizeof(obj->list));
-
-            if(obj->class->hook_serialize)
-                obj->class->hook_serialize(fd, obj);
         }
     }
     close(fd);
@@ -166,59 +125,28 @@ void world_free(void)
     }
 }
 
-/* map of class names -> object classes */
-static void *obj_class_map = NULL;
-
-struct object_t *obj_new(const char *class_name)
-{
-    if(!obj_class_map)
-    {
-        extern const struct obj_class_t netcosm_obj_classes[];
-        extern const size_t netcosm_obj_classes_sz;
-        obj_class_map = hash_init(netcosm_obj_classes_sz / 2 + 1,
-                                  hash_djb,
-                                  compare_strings);
-        for(unsigned i = 0; i < netcosm_obj_classes_sz; ++i)
-        {
-            if(hash_insert(obj_class_map,
-                           netcosm_obj_classes[i].class_name,
-                           netcosm_obj_classes + i))
-                error("duplicate object class name");
-        }
-    }
-
-    struct object_t *obj = calloc(1, sizeof(struct object_t));
-
-    obj->class = hash_lookup(obj_class_map, class_name);
-    if(!obj->class)
-    {
-        free(obj);
-        error("unknown object class '%s'", class_name);
-    }
-    else
-        return obj;
-}
-
-bool obj_add(room_id room, struct object_t *obj)
+bool room_obj_add(room_id room, struct object_t *obj)
 {
     return !hash_insert(room_get(room)->objects, obj->name, obj);
 }
 
 #define OBJMAP_SIZE 8
 
+static void free_obj(void *ptr)
+{
+    struct object_t *obj = ptr;
+    if(obj->class->hook_destroy)
+        obj->class->hook_destroy(obj);
+    free(obj);
+}
+
 /* initialize the room's hash tables */
 static void room_init_maps(struct room_t *room)
 {
     room->users = hash_init((userdb_size() / 2) + 1, hash_djb, compare_strings);
-    room->objects = hash_init(OBJMAP_SIZE, hash_djb, compare_strings);
-}
 
-bool read_bool(int fd)
-{
-    bool ret;
-    if(read(fd, &ret, sizeof(ret)) != sizeof(ret))
-        error("unexpected EOF");
-    return ret;
+    room->objects = hash_init(OBJMAP_SIZE, hash_djb, compare_strings);
+    hash_setfreedata_cb(room->objects, free_obj);
 }
 
 /**
@@ -273,15 +201,9 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
 
         for(unsigned j = 0; j < n_objects; ++j)
         {
-            const char *class_name = read_string(fd);
-            struct object_t *obj = obj_new(class_name);
-            obj->name = read_string(fd);
-            obj->can_take = read_bool(fd);
-            obj->list = read_bool(fd);
-            if(obj->class->hook_deserialize)
-                obj->class->hook_deserialize(fd, obj);
+            struct object_t *obj = obj_read(fd);
 
-            if(!obj_add(i, obj))
+            if(!room_obj_add(i, obj))
                 error("duplicate object name in room '%s'", world[i].data.name);
         }
     }
@@ -415,4 +337,9 @@ struct object_t *room_obj_get(room_id room, const char *name)
 size_t room_obj_count(room_id room)
 {
     return hash_size(room_get(room)->objects);
+}
+
+bool room_obj_del(room_id room, const char *name)
+{
+    return hash_remove(room_get(room)->objects, name);
 }

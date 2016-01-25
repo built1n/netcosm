@@ -243,6 +243,7 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
     {
         /* child */
         are_child = true;
+
         close(readpipe[0]);
         close(outpipe[1]);
         close(server_socket);

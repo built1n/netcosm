@@ -272,6 +272,51 @@ static void req_look_at(unsigned char *data, size_t datalen, struct child_data *
     }
 }
 
+static void req_take(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) datalen;
+    struct object_t *obj = room_obj_get(sender->room, (const char*)data);
+    if(obj)
+    {
+        struct object_t *dup = obj_dup(obj);
+        hash_insert(userdb_lookup(sender->user)->objects,
+                    dup->name, dup);
+
+        room_obj_del(sender->room, (const char*)data);
+
+        world_save(WORLDFILE);
+    }
+    else
+    {
+        const char *msg = "I don't know what that is.\n";
+        send_packet(sender, REQ_BCASTMSG, (void*)msg, strlen(msg));
+    }
+}
+
+static void req_inventory(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) datalen;
+    (void) data;
+
+    void *ptr = userdb_lookup(sender->user)->objects, *save;
+    char buf[MSG_MAX] = "You currently have:\n";
+
+    send_packet(sender, REQ_BCASTMSG, (void*)buf, strlen(buf));
+
+    while(1)
+    {
+        struct object_t *obj = hash_iterate(ptr, &save, NULL);
+        if(!obj)
+            break;
+        ptr = NULL;
+        int len = snprintf(buf, sizeof(buf), "A %s\n", obj->name);
+        send_packet(sender, REQ_BCASTMSG, (void*)buf, len);
+    }
+    const char *msg = "Nothing!\n";
+    if(ptr)
+        send_packet(sender, REQ_BCASTMSG, (void*)msg, strlen(msg));
+}
+
 static const struct child_request {
     unsigned char code;
 
@@ -286,22 +331,24 @@ static const struct child_request {
 
     void (*finalize)(unsigned char *data, size_t len, struct child_data *sender);
 } requests[] = {
-    { REQ_NOP,         false, CHILD_NONE,           NULL,                NULL,              },
-    { REQ_BCASTMSG,    true,  CHILD_ALL,            req_pass_msg,        NULL,              },
-    { REQ_LISTCLIENTS, false, CHILD_ALL,            req_send_clientinfo, req_send_geninfo,  },
-    { REQ_CHANGESTATE, true,  CHILD_SENDER,         req_change_state,    NULL,              },
-    { REQ_CHANGEUSER,  true,  CHILD_SENDER,         req_change_user,     NULL,              },
-    { REQ_KICK,        true,  CHILD_ALL,            req_kick_client,     NULL,              },
-    { REQ_WAIT,        false, CHILD_NONE,           NULL,                req_wait,          },
-    { REQ_GETROOMDESC, false, CHILD_NONE,           NULL,                req_send_desc,     },
-    { REQ_GETROOMNAME, false, CHILD_NONE,           NULL,                req_send_roomname, },
-    { REQ_SETROOM,     true,  CHILD_NONE,           NULL,                req_set_room,      },
-    { REQ_MOVE,        true,  CHILD_NONE,           NULL,                req_move_room,     },
-    { REQ_GETUSERDATA, true,  CHILD_NONE,           NULL,                req_send_user,     },
-    { REQ_DELUSERDATA, true,  CHILD_NONE,           NULL,                req_del_user,      },
-    { REQ_ADDUSERDATA, true,  CHILD_NONE,           NULL,                req_add_user,      },
-    { REQ_KICKALL,     true,  CHILD_ALL_BUT_SENDER, req_kick_always,     NULL,              },
-    { REQ_LOOKAT,      true,  CHILD_NONE,           NULL,                req_look_at,       },
+    {  REQ_NOP,             false,  CHILD_NONE,            NULL,                 NULL,               },
+    {  REQ_BCASTMSG,        true,   CHILD_ALL,             req_pass_msg,         NULL,               },
+    {  REQ_LISTCLIENTS,     false,  CHILD_ALL,             req_send_clientinfo,  req_send_geninfo,   },
+    {  REQ_CHANGESTATE,     true,   CHILD_SENDER,          req_change_state,     NULL,               },
+    {  REQ_CHANGEUSER,      true,   CHILD_SENDER,          req_change_user,      NULL,               },
+    {  REQ_KICK,            true,   CHILD_ALL,             req_kick_client,      NULL,               },
+    {  REQ_WAIT,            false,  CHILD_NONE,            NULL,                 req_wait,           },
+    {  REQ_GETROOMDESC,     false,  CHILD_NONE,            NULL,                 req_send_desc,      },
+    {  REQ_GETROOMNAME,     false,  CHILD_NONE,            NULL,                 req_send_roomname,  },
+    {  REQ_SETROOM,         true,   CHILD_NONE,            NULL,                 req_set_room,       },
+    {  REQ_MOVE,            true,   CHILD_NONE,            NULL,                 req_move_room,      },
+    {  REQ_GETUSERDATA,     true,   CHILD_NONE,            NULL,                 req_send_user,      },
+    {  REQ_DELUSERDATA,     true,   CHILD_NONE,            NULL,                 req_del_user,       },
+    {  REQ_ADDUSERDATA,     true,   CHILD_NONE,            NULL,                 req_add_user,       },
+    {  REQ_KICKALL,         true,   CHILD_ALL_BUT_SENDER,  req_kick_always,      NULL,               },
+    {  REQ_LOOKAT,          true,   CHILD_NONE,            NULL,                 req_look_at,        },
+    {  REQ_TAKE,            true,   CHILD_NONE,            NULL,                 req_take            },
+    {  REQ_PRINTINVENTORY,  false,  CHILD_NONE,            NULL,                 req_inventory       },
     //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,           },
 };
 

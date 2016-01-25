@@ -18,6 +18,10 @@
 
 #pragma once
 
+#include "globals.h"
+
+#include "obj.h"
+
 /* Our world is an array of rooms, each having a list of objects in
    them, as well as actions that can be performed in the room. Objects
    are added by hooks in rooms, which are provided by the world
@@ -28,36 +32,6 @@ typedef enum room_id { ROOM_NONE = -1 } room_id;
 typedef struct child_data user_t;
 
 enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
-
-/* Objects belong to an object class. Objects define their object
- * class through the class name, which is converted to a class ID
- * internally.
- */
-
-struct object_t;
-
-struct obj_class_t {
-    const char *class_name;
-
-    void (*hook_serialize)(int fd, struct object_t*);
-    void (*hook_deserialize)(int fd, struct object_t*);
-    bool (*hook_take)(struct object_t*, user_t *user);
-    void (*hook_drop)(struct object_t*, user_t *user);
-    void (*hook_use)(struct object_t*, user_t *user);
-    void (*hook_destroy)(struct object_t*);
-    const char* (*hook_desc)(struct object_t*, user_t*);
-};
-
-struct object_t {
-    struct obj_class_t *class;
-
-    const char *name; /* no articles: "a", "an", "the" */
-
-    bool can_take;
-    bool list;
-
-    void *userdata;
-};
 
 /* the data we get from a world module */
 struct roomdata_t {
@@ -103,22 +77,21 @@ struct room_t *room_get(room_id id);
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
 
-/* returns a new object of class 'c' */
-struct object_t *obj_new(const char *c);
-
-/* new should point to a new object allocated with obj_new(), with
- * 'name' properly set */
-bool obj_add(room_id room, struct object_t *obj);
-
 /* on the first call, room should be a valid room id, and *save should
  * point to a void pointer. On subsequent calls, room should be
  * ROOM_NONE, and *save should remain unchanged from the previous
  * call */
 struct object_t *room_obj_iterate(room_id room, void **save);
 
+/* new should point to a new object allocated with obj_new(), with
+ * 'name' properly set */
+bool room_obj_add(room_id room, struct object_t *obj);
+
 /* obj should be all lowercase */
 struct object_t *room_obj_get(room_id room, const char *obj);
 
 size_t room_obj_count(room_id room);
+
+bool room_obj_del(room_id room, const char *name);
 
 void world_free(void);

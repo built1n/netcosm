@@ -36,6 +36,8 @@ struct userdata_t {
     priv_t priv;
     room_id room;
     time_t last_login;
+
+    void *objects; /* hash of object names -> objects */
 };
 
 /* call before using anything else */

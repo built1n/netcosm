@@ -66,3 +66,51 @@ void all_lower(char *s)
         s++;
     }
 }
+
+void write_roomid(int fd, room_id *id)
+{
+    write(fd, id, sizeof(*id));
+}
+
+void write_string(int fd, const char *str)
+{
+    size_t len = strlen(str);
+    write(fd, &len, sizeof(len));
+    write(fd, str, len);
+}
+
+room_id read_roomid(int fd)
+{
+    room_id ret;
+    if(read(fd, &ret, sizeof(ret)) < 0)
+        return ROOM_NONE;
+    return ret;
+}
+
+char *read_string(int fd)
+{
+    size_t sz;
+    read(fd, &sz, sizeof(sz));
+    char *ret = malloc(sz + 1);
+    if(read(fd, ret, sz) < 0)
+    {
+        free(ret);
+        return NULL;
+    }
+    ret[sz] = '\0';
+    return ret;
+}
+
+bool read_bool(int fd)
+{
+    bool ret;
+    if(read(fd, &ret, sizeof(ret)) != sizeof(ret))
+        error("unexpected EOF");
+    return ret;
+}
+
+void write_bool(int fd, bool b)
+{
+    if(write(fd, &b, sizeof(b)) != sizeof(b))
+        error("write failed");
+}

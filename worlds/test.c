@@ -14,7 +14,7 @@ static void portal_init(room_id id)
     new->userdata = malloc(sizeof(double));
     double p = 3.14159265358979323846L;
     memcpy(new->userdata, &p, sizeof(p));
-    obj_add(id, new);
+    room_obj_add(id, new);
 }
 
 const struct roomdata_t netcosm_world[] = {

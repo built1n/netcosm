@@ -87,3 +87,5 @@ void *hash_getkeyptr(void*, const void *key);
     }
 
 size_t hash_size(void*);
+
+void *hash_dup(void*);

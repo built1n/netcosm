@@ -77,15 +77,12 @@ static void add_user_internal(const char *name, const char *pass, int authlevel)
     struct userdata_t userdata;
 
     strncpy(userdata.username, name, sizeof(userdata.username));
-
     memcpy(userdata.passhash, hexhash, sizeof(userdata.passhash));
 
     free(hexhash);
 
     userdata.priv = authlevel;
-
     userdata.last_login = time(0);
-
     memcpy(userdata.salt, salt, sizeof(salt));
 
     userdb_request_add(&userdata);
@@ -229,27 +226,5 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
 
 void auth_user_list(void)
 {
-    FILE *f = fopen(USERFILE, "r");
-
-    flock(fileno(f), LOCK_SH);
-
-    while(1)
-    {
-        char *line = NULL;
-        char *save;
-        size_t len = 0;
-        if(getline(&line, &len, f) < 0)
-        {
-            free(line);
-            fclose(f);
-            return;
-        }
-        char *user = strdup(strtok_r(line, ":\r\n", &save));
-        strtok_r(NULL, ":\r\n", &save);
-        strtok_r(NULL, ":\r\n", &save);
-        int priv = strtol(strtok_r(NULL, ":\r\n", &save), NULL, 0);
-        out("User %s priv %d\n", user, priv);
-        free(user);
-        free(line);
-    }
+    /* FIXME: todo */
 }

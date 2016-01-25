@@ -155,6 +155,7 @@ static void load_worldfile(void)
 {
     extern const struct roomdata_t netcosm_world[];
     extern const size_t netcosm_world_sz;
+
     extern const char *netcosm_world_name;
 
     if(access(WORLDFILE, F_OK) < 0)

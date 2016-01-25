@@ -24,3 +24,4 @@ void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
 void __attribute__((format(printf,4,5))) debugf_real(const char*, int, const char*, const char *fmt, ...);
 void remove_cruft(char*);
 void all_upper(char*);
+void all_lower(char*);

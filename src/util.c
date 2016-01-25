@@ -57,3 +57,12 @@ void all_upper(char *s)
         s++;
     }
 }
+
+void all_lower(char *s)
+{
+    while(*s)
+    {
+        *s = tolower(*s);
+        s++;
+    }
+}

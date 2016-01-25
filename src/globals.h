@@ -29,6 +29,7 @@
 #include <arpa/telnet.h>
 #include <assert.h>
 #include <bsd/stdlib.h> // for arc4random
+#include <bsd/string.h> // for strlcat
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>

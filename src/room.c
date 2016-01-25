@@ -114,6 +114,29 @@ void world_save(const char *fname)
         /* callbacks are static, so are not serialized */
 
         write(fd, world[i].adjacent, sizeof(world[i].adjacent));
+
+        /* now we serialize all the objects in this room */
+
+        size_t n_objects = room_obj_count(i);
+        write(fd, &n_objects, sizeof(n_objects));
+
+        room_id id = i;
+        void *save;
+        while(1)
+        {
+            struct object_t *obj = room_obj_iterate(id, &save);
+            if(!obj)
+                break;
+            id = ROOM_NONE;
+
+            write_string(fd, obj->class->class_name);
+            write_string(fd, obj->name);
+            write(fd, &obj->can_take, sizeof(obj->can_take));
+            write(fd, &obj->list, sizeof(obj->list));
+
+            if(obj->class->hook_serialize)
+                obj->class->hook_serialize(fd, obj);
+        }
     }
     close(fd);
 }
@@ -170,7 +193,7 @@ struct object_t *obj_new(const char *class_name)
     if(!obj->class)
     {
         free(obj);
-        return NULL;
+        error("unknown object class '%s'", class_name);
     }
     else
         return obj;
@@ -188,6 +211,14 @@ static void room_init_maps(struct room_t *room)
 {
     room->users = hash_init((userdb_size() / 2) + 1, hash_djb, compare_strings);
     room->objects = hash_init(OBJMAP_SIZE, hash_djb, compare_strings);
+}
+
+bool read_bool(int fd)
+{
+    bool ret;
+    if(read(fd, &ret, sizeof(ret)) != sizeof(ret))
+        error("unexpected EOF");
+    return ret;
 }
 
 /**
@@ -235,6 +266,24 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
         world[i].data.desc = read_string(fd);
         if(read(fd, world[i].adjacent, sizeof(world[i].adjacent)) < 0)
             return false;
+
+        size_t n_objects;
+        if(read(fd, &n_objects, sizeof(n_objects)) != sizeof(n_objects))
+            error("world file corrupt");
+
+        for(unsigned j = 0; j < n_objects; ++j)
+        {
+            const char *class_name = read_string(fd);
+            struct object_t *obj = obj_new(class_name);
+            obj->name = read_string(fd);
+            obj->can_take = read_bool(fd);
+            obj->list = read_bool(fd);
+            if(obj->class->hook_deserialize)
+                obj->class->hook_deserialize(fd, obj);
+
+            if(!obj_add(i, obj))
+                error("duplicate object name in room '%s'", world[i].data.name);
+        }
     }
 
     close(fd);
@@ -361,4 +410,9 @@ struct object_t *room_obj_iterate(room_id room, void **save)
 struct object_t *room_obj_get(room_id room, const char *name)
 {
     return hash_lookup(room_get(room)->objects, name);
+}
+
+size_t room_obj_count(room_id room)
+{
+    return hash_size(room_get(room)->objects);
 }

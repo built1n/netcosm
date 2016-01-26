@@ -1,7 +1,8 @@
 language: c
 sudo: required
 before-install:
- - sudo apt-get -y install libbsd libev
+ - sudo apt-get -qq update
+ - sudo apt-get install -y libbsd libev
  - uname -a
 install:
  - make

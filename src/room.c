@@ -94,7 +94,7 @@ void world_save(const char *fname)
             if(!obj)
                 break;
             id = ROOM_NONE;
-
+            obj_write(fd, obj);
         }
     }
     close(fd);
@@ -104,6 +104,7 @@ static void room_free(struct room_t *room)
 {
     hash_free(room->users);
     room->users = NULL;
+    hash_setfreedata_cb(room->objects, obj_free);
     hash_free(room->objects);
     room->objects = NULL;
     free(room->data.name);
@@ -132,21 +133,12 @@ bool room_obj_add(room_id room, struct object_t *obj)
 
 #define OBJMAP_SIZE 8
 
-static void free_obj(void *ptr)
-{
-    struct object_t *obj = ptr;
-    if(obj->class->hook_destroy)
-        obj->class->hook_destroy(obj);
-    free(obj);
-}
-
 /* initialize the room's hash tables */
 static void room_init_maps(struct room_t *room)
 {
     room->users = hash_init((userdb_size() / 2) + 1, hash_djb, compare_strings);
 
     room->objects = hash_init(OBJMAP_SIZE, hash_djb, compare_strings);
-    hash_setfreedata_cb(room->objects, free_obj);
 }
 
 /**
@@ -201,6 +193,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
 
         for(unsigned j = 0; j < n_objects; ++j)
         {
+            debugf("READING %dth OBJECT\n", j);
             struct object_t *obj = obj_read(fd);
 
             if(!room_obj_add(i, obj))

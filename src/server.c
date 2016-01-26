@@ -127,6 +127,8 @@ static void __attribute__((noreturn)) serv_cleanup(void)
 
     userdb_shutdown();
 
+    obj_shutdown();
+
     extern char *current_user;
     if(current_user)
         free(current_user);
@@ -259,6 +261,8 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
 
         /* user DB requests go through the master */
         userdb_shutdown();
+
+        obj_shutdown();
 
         debugf("Child with PID %d spawned\n", getpid());
 

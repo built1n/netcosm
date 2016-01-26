@@ -17,6 +17,7 @@
  */
 
 #include "globals.h"
+#include <sys/resource.h>
 
 void remove_cruft(char *str)
 {
@@ -90,7 +91,11 @@ room_id read_roomid(int fd)
 char *read_string(int fd)
 {
     size_t sz;
-    read(fd, &sz, sizeof(sz));
+    if(read(fd, &sz, sizeof(sz)) != sizeof(sz))
+    {
+        error("read_string: EOF");
+    }
+    debugf("sz is %d\n", sz);
     char *ret = malloc(sz + 1);
     if(read(fd, ret, sz) < 0)
     {

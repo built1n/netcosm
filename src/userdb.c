@@ -26,9 +26,25 @@
 static void *map = NULL;
 static char *db_file = NULL;
 
+static void free_userdata_and_objs(void *ptr)
+{
+    struct userdata_t *data = ptr;
+
+    debugf("Freeing DATA AND OBJECTS of %s\n", data->username);
+
+    if(data->objects)
+    {
+        hash_setfreedata_cb(data->objects, obj_free);
+        hash_free(data->objects);
+        data->objects = NULL;
+    }
+    free(data);
+}
+
 static void free_userdata(void *ptr)
 {
     struct userdata_t *data = ptr;
+
     hash_free(data->objects);
     free(data);
 }
@@ -55,11 +71,17 @@ void userdb_init(const char *file)
             struct userdata_t *data = calloc(1, sizeof(*data));
 
             if(read(fd, data, sizeof(*data)) != sizeof(*data))
+            {
+                free(data);
                 break;
+            }
 
             size_t n_objects;
             if(read(fd, &n_objects, sizeof(n_objects)) != sizeof(n_objects))
+            {
+                free(data);
                 break;
+            }
 
             data->objects = hash_init(MIN(8, n_objects),
                                       hash_djb,
@@ -114,7 +136,6 @@ void userdb_write(const char *file)
                 if(!obj)
                     break;
                 objptr = NULL;
-                debugf("WRITING OBJECT %s\n", obj->name);
                 obj_write(fd, obj);
             }
         }
@@ -167,8 +188,10 @@ void userdb_shutdown(void)
 {
     if(map && db_file && !are_child)
         userdb_write(db_file);
+
     if(map)
     {
+        hash_setfreedata_cb(map, free_userdata_and_objs);
         hash_free(map);
         map = NULL;
     }

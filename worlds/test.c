@@ -9,7 +9,7 @@ static void portal_init(room_id id)
 {
     debugf("portal room init.\n");
     struct object_t *new = obj_new("weapon");
-    new->name = "sword";
+    new->name = strdup("sword");
     new->list = true;
     new->userdata = malloc(sizeof(double));
     double p = 3.14159265358979323846L;
@@ -99,13 +99,20 @@ const char *shiny(struct object_t *obj, user_t *user)
 
 void weap_serialize(int fd, struct object_t *obj)
 {
-    write(fd, obj->userdata, sizeof(double));
+    if(obj->userdata)
+        write(fd, obj->userdata, sizeof(double));
 }
 
 void weap_deserialize(int fd, struct object_t *obj)
 {
     obj->userdata = malloc(sizeof(double));
     read(fd, obj->userdata, sizeof(double));
+}
+
+void weap_destroy(struct object_t *obj)
+{
+    free(obj->userdata);
+    obj->userdata = NULL;
 }
 
 const struct obj_class_t netcosm_obj_classes[] = {
@@ -115,7 +122,7 @@ const struct obj_class_t netcosm_obj_classes[] = {
       NULL,
       NULL,
       NULL,
-      NULL,
+      weap_destroy,
       shiny },
 };
 

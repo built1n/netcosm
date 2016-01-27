@@ -5,5 +5,5 @@ before-install:
  - sudo apt-get install -y libbsd libev
  - uname -a
 install:
- - make
+ - make --debug
  - ./build/unix.bin &

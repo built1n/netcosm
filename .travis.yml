@@ -6,10 +6,12 @@ language: c
 compiler:
  - gcc
 
-before_install:
+install:
  - sudo apt-get update
  - sudo apt-get install -y libbsd-dev libev-dev
  - uname -a
-install:
- - make --debug
- - ./build/unix.bin &
+script:
+ - make -j2
+ - sudo make install
+deploy:
+ - sudo netcosm 23

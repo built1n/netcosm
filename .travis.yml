@@ -8,7 +8,7 @@ compiler:
 
 before_install:
  - sudo apt-get update
- - sudo apt-get install -y libbsd libev
+ - sudo apt-get install -y libbsd-dev libev-dev
  - uname -a
 install:
  - make --debug

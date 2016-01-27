@@ -24,7 +24,7 @@
 #include "userdb.h"
 #include "util.h"
 
-#define PORT 1234
+#define DEFAULT_PORT 1234
 #define BACKLOG 512
 
 /* global data */
@@ -35,7 +35,7 @@ void *child_map = NULL;
 volatile int num_clients = 0;
 
 /* local data */
-static uint16_t port;
+static uint16_t port = DEFAULT_PORT;
 
 static int server_socket;
 
@@ -144,10 +144,18 @@ static void __attribute__((noreturn)) sigint_handler(int s)
     exit(0);
 }
 
+static bool autoconfig = false;
+const char *autouser, *autopass;
+
 static void check_userfile(void)
 {
     if(access(USERFILE, F_OK) < 0 || userdb_size() == 0)
-        first_run_setup();
+    {
+        if(!autoconfig)
+            first_run_setup();
+        else
+            auth_user_add(autouser, autopass, PRIV_ADMIN);
+    }
 
     if(access(USERFILE, R_OK | W_OK) < 0)
         error("cannot access "USERFILE);
@@ -330,6 +338,40 @@ static void init_signals(void)
         error("sigaction");
 }
 
+static void parse_args(int argc, char *argv[])
+{
+    for(int i = 1; i < argc; ++i)
+    {
+        if(argv[i][0] == '-')
+        {
+            if(strlen(argv[i]) > 1)
+            {
+                char c = argv[i][1];
+            retry:
+                switch(c)
+                {
+                case 'h': /* help */
+                    debugf("FIXME: usage message");
+                    exit(0);
+                case 'a': /* automatic first-run config */
+                    autoconfig = true;
+                    autouser = argv[++i];
+                    autopass = argv[++i];
+                    break;
+                case 'd': /* set data prefix */
+                    chdir(argv[++i]);
+                    break;
+                default:
+                    c = 'h';
+                    goto retry;
+                }
+            }
+        }
+        else
+            port = strtol(argv[i], NULL, 10);
+    }
+}
+
 static SIMP_HASH(pid_t, pid_hash);
 static SIMP_EQUAL(pid_t, pid_equal);
 
@@ -341,10 +383,7 @@ int server_main(int argc, char *argv[])
     assert(ev_version_major() == EV_VERSION_MAJOR &&
            ev_version_minor() >= EV_VERSION_MINOR);
 
-    if(argc != 2)
-        port = PORT;
-    else
-        port = strtol(argv[1], NULL, 0);
+    parse_args(argc, argv);
 
     srand(time(0));
 

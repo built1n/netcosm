@@ -1,7 +1,13 @@
-language: c
 sudo: required
+dist: trusty
+
+language: c
+
+compiler:
+ - gcc
+
 before-install:
- - sudo apt-get -qq update
+ - sudo apt-get update
  - sudo apt-get install -y libbsd libev
  - uname -a
 install:

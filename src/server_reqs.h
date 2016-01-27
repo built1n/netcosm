@@ -42,6 +42,7 @@
 #define REQ_TAKE              20 /* server: add object to user inventory */
 #define REQ_PRINTINVENTORY    21 /* server: print user inventory */
 #define REQ_DROP              22 /* server: drop user object if allowed */
+#define REQ_LISTUSERS         23 /* server: list users in USERFILE */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */

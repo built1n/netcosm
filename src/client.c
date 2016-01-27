@@ -441,6 +441,11 @@ void client_drop(char *what)
     send_master(REQ_DROP, what, strlen(what) + 1);
 }
 
+void client_user_list(void)
+{
+    send_master(REQ_LISTUSERS, NULL, 0);
+}
+
 #define WSPACE " \t\r\n"
 
 void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
@@ -619,7 +624,7 @@ auth:
                 }
                 else if(!strcmp(what, "LIST"))
                 {
-                    auth_user_list();
+                    client_user_list();
                 }
                 else
                 {

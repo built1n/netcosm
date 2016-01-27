@@ -436,6 +436,11 @@ void client_inventory(void)
     send_master(REQ_PRINTINVENTORY, NULL, 0);
 }
 
+void client_drop(char *what)
+{
+    send_master(REQ_DROP, what, strlen(what) + 1);
+}
+
 #define WSPACE " \t\r\n"
 
 void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
@@ -738,6 +743,11 @@ auth:
             }
             else
                 out("Expected direction after GO.\n");
+        }
+        else if(!strcmp(tok, "DROP"))
+        {
+            char *what = strtok_r(NULL, " ", &save);
+            client_drop(what);
         }
 
     next_cmd:

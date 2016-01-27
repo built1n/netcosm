@@ -9,7 +9,7 @@ features might drift out of existence without prior warning!
 ### Prerequisites:
 
 * openssl (for password hashing)
-* libbsd (for arc4random, strlcpy, etc.)
+* libbsd (for strlcpy)
 * libev
 * linux >= 3.4 (for "packet mode" pipes)
 * glibc >= 2.9
@@ -51,8 +51,8 @@ Both of these pipes are created in "packet mode" (see pipe(2)), and
 therefore require at least linux 3.4 and glibc 2.9.
 
 Many operations, such as listing clients, require the help of the
-master process. To request an operation, the child writes it's request
-data to it's pipe to the parent. The size of the request MUST be less
+master process. To request an operation, the child writes its request
+data to its pipe to the parent. The size of the request MUST be less
 than PIPE_BUF, which is 4096 on Linux. The format of the request is as
 follows:
 
@@ -91,7 +91,7 @@ latency.
 
 Versions are numbered using the MAJOR.MINOR.BUGFIX scheme.
 
-Current stable is 0.3.0.
+The latest version is 0.4.0-rc1.
 
 Major versions mark major milestones (see below), minor versions mark
 incremental milestones and compatibility of data files, and bugfix
@@ -102,8 +102,8 @@ number.
 
 #### 0.4.0
 
-* Object support
-* User inventory support
+* Object support [DONE, needs testing]
+* User inventory support [PARTIAL]
 
 #### 0.5.0
 

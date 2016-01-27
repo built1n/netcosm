@@ -95,7 +95,6 @@ char *read_string(int fd)
     {
         error("read_string: EOF");
     }
-    debugf("sz is %d\n", sz);
     char *ret = malloc(sz + 1);
     if(read(fd, ret, sz) < 0)
     {
@@ -115,6 +114,20 @@ bool read_bool(int fd)
 }
 
 void write_bool(int fd, bool b)
+{
+    if(write(fd, &b, sizeof(b)) != sizeof(b))
+        error("write failed");
+}
+
+uint32_t read_uint32(int fd)
+{
+    uint32_t ret;
+    if(read(fd, &ret, sizeof(ret)) != sizeof(ret))
+        error("unexpected EOF");
+    return ret;
+}
+
+void write_uint32(int fd, uint32_t b)
 {
     if(write(fd, &b, sizeof(b)) != sizeof(b))
         error("write failed");

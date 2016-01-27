@@ -41,10 +41,10 @@ static char *hash_pass_hex(const char *pass, const char *salt)
     SHA512(salted, pass_len + SALT_LEN, hash);
 
     unsigned char tmp[AUTH_HASHLEN];
-    /* now hash the hash half a million times to slow things down */
-    for(int i = 0; i < HASH_ITERS - 1; ++i)
+    /* now hash the hash a million times to slow things down */
+    for(int i = 0; i < (HASH_ITERS / 2) - 1; ++i)
     {
-        memcpy(tmp, hash, AUTH_HASHLEN);
+        AUTH_HASHFUNC(hash, AUTH_HASHLEN, tmp);
         AUTH_HASHFUNC(tmp, AUTH_HASHLEN, hash);
     }
     memset(tmp, 0, sizeof(tmp));

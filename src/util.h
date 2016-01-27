@@ -36,3 +36,6 @@ room_id read_roomid(int fd);
 
 void write_bool(int fd, bool b);
 bool read_bool(int fd);
+
+void write_uint32(int fd, uint32_t i);
+uint32_t read_uint32(int fd);

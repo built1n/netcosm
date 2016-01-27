@@ -115,13 +115,20 @@ void weap_destroy(struct object_t *obj)
     obj->userdata = NULL;
 }
 
+void *weap_clone(void *userdata)
+{
+    void *ret = malloc(sizeof(double));
+    memcpy(ret, userdata, sizeof(double));
+    return ret;
+}
+
 const struct obj_class_t netcosm_obj_classes[] = {
     { "weapon",
       weap_serialize,
       weap_deserialize,
       NULL,
       NULL,
-      NULL,
+      weap_clone,
       weap_destroy,
       shiny },
 };

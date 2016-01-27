@@ -30,8 +30,6 @@ static void free_userdata_and_objs(void *ptr)
 {
     struct userdata_t *data = ptr;
 
-    debugf("Freeing DATA AND OBJECTS of %s\n", data->username);
-
     if(data->objects)
     {
         hash_setfreedata_cb(data->objects, obj_free);
@@ -66,6 +64,8 @@ void userdb_init(const char *file)
     /* 0 is a valid fd */
     if(fd >= 0)
     {
+        if(read_uint32(fd) != USERDB_MAGIC)
+            error("bad userdb magic value");
         while(1)
         {
             struct userdata_t *data = calloc(1, sizeof(*data));
@@ -87,8 +87,6 @@ void userdb_init(const char *file)
                                       hash_djb,
                                       compare_strings);
 
-            debugf("READING %d OBJECTS INTO INVENTORY\n", n_objects);
-
             for(unsigned i = 0; i < n_objects; ++i)
             {
                 struct object_t *obj = obj_read(fd);
@@ -105,6 +103,7 @@ void userdb_init(const char *file)
 void userdb_write(const char *file)
 {
     int fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    write_uint32(fd, USERDB_MAGIC);
     void *save, *ptr = map;
     while(1)
     {
@@ -122,8 +121,6 @@ void userdb_write(const char *file)
             n_objects = 0;
 
         write(fd, &n_objects, sizeof(n_objects));
-
-        debugf("WRITING %d OBJECTS\n", n_objects);
 
         /* write objects */
 

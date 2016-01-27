@@ -28,7 +28,6 @@
 #include <arpa/inet.h>
 #include <arpa/telnet.h>
 #include <assert.h>
-#include <bsd/stdlib.h> // for arc4random
 #include <bsd/string.h> // for strlcat
 #include <ctype.h>
 #include <errno.h>
@@ -64,9 +63,10 @@
 #define WORLDFILE "world.dat"
 #define LOGFILE "netcosm.log"
 
-#define WORLD_MAGIC 0x31415926
+#define WORLD_MAGIC  0x31415926
+#define USERDB_MAGIC 0x27182818
 #define MAX_FAILURES 3
-#define NETCOSM_VERSION "0.3.0"
+#define NETCOSM_VERSION "0.4.0-rc1"
 
 /* username length */
 #define MAX_NAME_LEN 32

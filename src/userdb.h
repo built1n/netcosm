@@ -30,7 +30,7 @@ struct userdata_t {
 
     char salt[SALT_LEN + 1];
 
-    /* in hex + NULL terminator */
+    /* in lowercase hex + NULL terminator */
     char passhash[AUTH_HASHLEN * 2 + 1];
 
     priv_t priv;

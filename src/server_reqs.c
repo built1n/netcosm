@@ -47,6 +47,18 @@ tryagain:
     }
 }
 
+static void __attribute__((format(printf,2,3)))
+send_msg(struct child_data *child, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    char *buf;
+    int len = vasprintf(&buf, fmt, ap);
+    va_end(ap);
+    send_packet(child, REQ_BCASTMSG, buf, len);
+    free(buf);
+}
+
 static void req_pass_msg(unsigned char *data, size_t datalen,
                          struct child_data *sender, struct child_data *child)
 {
@@ -243,9 +255,7 @@ static void req_send_geninfo(unsigned char *data, size_t datalen, struct child_d
 {
     (void) data;
     (void) datalen;
-    char buf[128];
-    int len = snprintf(buf, sizeof(buf), "Total clients: %d\n", num_clients);
-    send_packet(sender, REQ_BCASTMSG, buf, len);
+    send_msg(sender, "Total clients: %d\n", num_clients);
 }
 
 static void req_kick_always(unsigned char *data, size_t datalen,
@@ -267,8 +277,7 @@ static void req_look_at(unsigned char *data, size_t datalen, struct child_data *
     }
     else
     {
-        const char *msg = "I don't know what that is.\n";
-        send_packet(sender, REQ_BCASTMSG, (void*)msg, strlen(msg));
+        send_msg(sender, "I don't know what that is.\n");
     }
 }
 
@@ -278,6 +287,12 @@ static void req_take(unsigned char *data, size_t datalen, struct child_data *sen
     struct object_t *obj = room_obj_get(sender->room, (const char*)data);
     if(obj)
     {
+        if(obj->class->hook_take && !obj->class->hook_take(obj, sender))
+        {
+            send_msg(sender, "You can't take that.\n");
+            return;
+        }
+
         struct object_t *dup = obj_dup(obj);
         hash_insert(userdb_lookup(sender->user)->objects,
                     dup->name, dup);
@@ -285,11 +300,13 @@ static void req_take(unsigned char *data, size_t datalen, struct child_data *sen
         room_obj_del(sender->room, (const char*)data);
 
         world_save(WORLDFILE);
+        userdb_write(USERFILE);
+
+        send_msg(sender, "Taken.\n");
     }
     else
     {
-        const char *msg = "I don't know what that is.\n";
-        send_packet(sender, REQ_BCASTMSG, (void*)msg, strlen(msg));
+        send_msg(sender, "I don't know what that is.\n");
     }
 }
 
@@ -299,22 +316,50 @@ static void req_inventory(unsigned char *data, size_t datalen, struct child_data
     (void) data;
 
     void *ptr = userdb_lookup(sender->user)->objects, *save;
-    char buf[MSG_MAX] = "You currently have:\n";
 
-    send_packet(sender, REQ_BCASTMSG, (void*)buf, strlen(buf));
+    send_msg(sender, "You currently have:\n");
 
     while(1)
     {
         struct object_t *obj = hash_iterate(ptr, &save, NULL);
+
         if(!obj)
             break;
+
         ptr = NULL;
+
+        char buf[MSG_MAX];
         int len = snprintf(buf, sizeof(buf), "A %s\n", obj->name);
+
         send_packet(sender, REQ_BCASTMSG, (void*)buf, len);
     }
-    const char *msg = "Nothing!\n";
     if(ptr)
-        send_packet(sender, REQ_BCASTMSG, (void*)msg, strlen(msg));
+        send_msg(sender, "Nothing!\n");
+}
+
+static void req_drop(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) datalen;
+    (void) data;
+
+    struct userdata_t *user = userdb_lookup(sender->user);
+    if(!user)
+        return;
+    struct object_t *obj = hash_lookup(user->objects, (const char*)data);
+    if(!obj)
+    {
+        send_msg(sender, "You don't have that.\n");
+        return;
+    }
+
+    struct object_t *dup = obj_dup(obj);
+    room_obj_add(sender->room, dup);
+    hash_remove(user->objects, (const char*)data);
+
+    send_msg(sender, "Dropped.\n");
+
+    world_save(WORLDFILE);
+    userdb_write(USERFILE);
 }
 
 static const struct child_request {
@@ -347,8 +392,9 @@ static const struct child_request {
     {  REQ_ADDUSERDATA,     true,   CHILD_NONE,            NULL,                 req_add_user,       },
     {  REQ_KICKALL,         true,   CHILD_ALL_BUT_SENDER,  req_kick_always,      NULL,               },
     {  REQ_LOOKAT,          true,   CHILD_NONE,            NULL,                 req_look_at,        },
-    {  REQ_TAKE,            true,   CHILD_NONE,            NULL,                 req_take            },
-    {  REQ_PRINTINVENTORY,  false,  CHILD_NONE,            NULL,                 req_inventory       },
+    {  REQ_TAKE,            true,   CHILD_NONE,            NULL,                 req_take,           },
+    {  REQ_PRINTINVENTORY,  false,  CHILD_NONE,            NULL,                 req_inventory,      },
+    {  REQ_DROP,            true,   CHILD_NONE,            NULL,                 req_drop,           },
     //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,           },
 };
 

@@ -64,8 +64,7 @@ bool room_user_del(room_id id, struct child_data *child)
 void world_save(const char *fname)
 {
     int fd = open(fname, O_CREAT | O_WRONLY, 0644);
-    uint32_t magic = WORLD_MAGIC;
-    write(fd, &magic, sizeof(magic));
+    write_uint32(fd, WORLD_MAGIC);
     write(fd, &world_sz, sizeof(world_sz));
     write_string(fd, world_name);
     for(unsigned i = 0; i < world_sz; ++i)
@@ -139,6 +138,7 @@ static void room_init_maps(struct room_t *room)
     room->users = hash_init((userdb_size() / 2) + 1, hash_djb, compare_strings);
 
     room->objects = hash_init(OBJMAP_SIZE, hash_djb, compare_strings);
+    hash_setfreedata_cb(room->objects, obj_free);
 }
 
 /**
@@ -153,9 +153,8 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     int fd = open(fname, O_RDONLY);
     if(fd < 0)
         return false;
-    uint32_t magic;
-    read(fd, &magic, sizeof(magic));
-    if(magic != WORLD_MAGIC)
+
+    if(read_uint32(fd) != WORLD_MAGIC)
         return false;
 
     if(world)
@@ -193,7 +192,6 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
 
         for(unsigned j = 0; j < n_objects; ++j)
         {
-            debugf("READING %dth OBJECT\n", j);
             struct object_t *obj = obj_read(fd);
 
             if(!room_obj_add(i, obj))

@@ -204,8 +204,17 @@ size_t userdb_size(void)
     return hash_size(map);
 }
 
-/* child request wrappers */
-/* NOTE: also works from the master, but it's better to use the userdb_* funcs instead */
+struct userdata_t *userdb_iterate(void **save)
+{
+    if(*save)
+        return hash_iterate(NULL, save, NULL);
+    else
+        return hash_iterate(map, save, NULL);
+}
+
+/*** child request wrappers ***/
+/* NOTE: these also work from the master, but it's better to use the
+ * userdb_* funcs instead */
 
 struct userdata_t *userdb_request_lookup(const char *name)
 {

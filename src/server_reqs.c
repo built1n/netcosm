@@ -362,6 +362,25 @@ static void req_drop(unsigned char *data, size_t datalen, struct child_data *sen
     userdb_write(USERFILE);
 }
 
+static void req_listusers(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) data;
+    (void) datalen;
+
+    void *save = NULL;
+    while(1)
+    {
+        struct userdata_t *user = userdb_iterate(&save);
+        if(!user)
+            break;
+
+        send_msg(sender, "%s: priv: %d room: %d last: %s", user->username,
+                 user->priv,
+                 user->room,
+                 ctime(&user->last_login));
+    }
+}
+
 static const struct child_request {
     unsigned char code;
 
@@ -378,10 +397,11 @@ static const struct child_request {
 } requests[] = {
     {  REQ_NOP,             false,  CHILD_NONE,            NULL,                 NULL,               },
     {  REQ_BCASTMSG,        true,   CHILD_ALL,             req_pass_msg,         NULL,               },
-    {  REQ_LISTCLIENTS,     false,  CHILD_ALL,             req_send_clientinfo,  req_send_geninfo,   },
     {  REQ_CHANGESTATE,     true,   CHILD_SENDER,          req_change_state,     NULL,               },
     {  REQ_CHANGEUSER,      true,   CHILD_SENDER,          req_change_user,      NULL,               },
     {  REQ_KICK,            true,   CHILD_ALL,             req_kick_client,      NULL,               },
+    {  REQ_KICKALL,         true,   CHILD_ALL_BUT_SENDER,  req_kick_always,      NULL,               },
+    {  REQ_LISTCLIENTS,     false,  CHILD_ALL,             req_send_clientinfo,  req_send_geninfo,   },
     {  REQ_WAIT,            false,  CHILD_NONE,            NULL,                 req_wait,           },
     {  REQ_GETROOMDESC,     false,  CHILD_NONE,            NULL,                 req_send_desc,      },
     {  REQ_GETROOMNAME,     false,  CHILD_NONE,            NULL,                 req_send_roomname,  },
@@ -390,11 +410,11 @@ static const struct child_request {
     {  REQ_GETUSERDATA,     true,   CHILD_NONE,            NULL,                 req_send_user,      },
     {  REQ_DELUSERDATA,     true,   CHILD_NONE,            NULL,                 req_del_user,       },
     {  REQ_ADDUSERDATA,     true,   CHILD_NONE,            NULL,                 req_add_user,       },
-    {  REQ_KICKALL,         true,   CHILD_ALL_BUT_SENDER,  req_kick_always,      NULL,               },
     {  REQ_LOOKAT,          true,   CHILD_NONE,            NULL,                 req_look_at,        },
     {  REQ_TAKE,            true,   CHILD_NONE,            NULL,                 req_take,           },
     {  REQ_PRINTINVENTORY,  false,  CHILD_NONE,            NULL,                 req_inventory,      },
     {  REQ_DROP,            true,   CHILD_NONE,            NULL,                 req_drop,           },
+    {  REQ_LISTUSERS,       false,  CHILD_NONE,            NULL,                 req_listusers       },
     //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,           },
 };
 

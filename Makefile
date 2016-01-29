@@ -96,3 +96,7 @@ veryclean:
 .PHONY: depend
 depend: $(DEPS)
 	@echo "Dependencies (re)generated."
+
+.PHONY: install
+install: $(OUT)
+	@install build/unix.bin $(PREFIX)/bin/netcosm

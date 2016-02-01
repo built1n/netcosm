@@ -26,17 +26,17 @@ If you want to listen on a privileged port (below 1024), you will
 either have to run the executable as root (not recommended), or set
 the CAP_NET_BIND_SERVICE capability on Linux:
 
-    sudo setcap 'cap_net_bind_service=+ep' build/unix.bin
+    sudo make setcap
 
 If running as root, you will need an unprivileged user called 'nobody'
 on your system in order for things to work.
 
 ## Todo List
 
-* World persistence (partial)
-* Inventory
 * Verbs
+
 * Game scripting
+
 * NPCs
 
 ## Internal Design
@@ -91,25 +91,33 @@ latency.
 
 Versions are numbered using the MAJOR.MINOR.BUGFIX scheme.
 
-The latest version is 0.4.0-rc1.
+The latest version is 0.5.0-rc1.
 
 Major versions mark major milestones (see below), minor versions mark
 incremental milestones and compatibility of data files, and bugfix
 versions mark major bugfixes that don't warrant a new major or minor
 number.
 
-### Roadmap
+### Changelog
 
-#### 0.4.0
+#### 0.4.0 (skipped)
 
 * Object support [DONE, needs testing]
-* User inventory support [PARTIAL]
+
+* User inventory support [DONE]
+
+### Roadmap
 
 #### 0.5.0
 
-* Verb support
-* World hooks/scripting
+* Verb support [DONE]
+
+* World hooks/scripting [PARTIAL]
 
 #### 0.6.0
+
+* NPC users
+
+#### 0.7.0
 
 * Dynamic world editing

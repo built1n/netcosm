@@ -171,7 +171,7 @@ void send_master(unsigned char cmd, const void *data, size_t sz)
     free(req);
 }
 
-#define BUFSZ 128
+#define CLIENT_READ_SZ 128
 
 char *client_read(void)
 {
@@ -179,10 +179,8 @@ char *client_read(void)
     size_t bufidx;
 tryagain:
 
-    buf = malloc(BUFSZ);
+    buf = calloc(1, CLIENT_READ_SZ);
     bufidx = 0;
-
-    memset(buf, 0, BUFSZ);
 
     /* set of the client fd and the pipe from our parent */
     struct pollfd fds[2];
@@ -209,11 +207,11 @@ tryagain:
                 }
                 else if(fds[i].fd == client_fd)
                 {
-                    ssize_t len = read(client_fd, buf + bufidx, BUFSZ - bufidx - 1);
+                    ssize_t len = read(client_fd, buf + bufidx, CLIENT_READ_SZ - bufidx - 1);
                     if(len <= 0)
                         error("lost connection (%d)", fds[i].revents);
 
-                    buf[BUFSZ - 1] = '\0';
+                    buf[CLIENT_READ_SZ - 1] = '\0';
 
                     enum telnet_status ret = telnet_parse_data((unsigned char*)buf + bufidx, len);
 
@@ -298,7 +296,7 @@ bool poll_requests(void)
             reqdata_type = TYPE_BOOLEAN;
             returned_reqdata.boolean = status;
             if(!status)
-                out("Cannot go that way.\n");
+                out("You cannot go that way.\n");
             break;
         }
         case REQ_GETUSERDATA:
@@ -529,17 +527,20 @@ auth:
     else
         client_change_state(STATE_LOGGEDIN);
 
-    /* authenticated */
+    /* authenticated, begin main command loop */
     debugf("client: Authenticated as %s\n", current_user);
     client_change_user(current_user);
     current_room = 0;
+
     client_change_room(current_room);
+
     client_look();
+
     while(1)
     {
         out(">> ");
         char *cmd = client_read();
-
+        char *orig = strdup(cmd);
         char *save = NULL;
 
         char *tok = strtok_r(cmd, WSPACE, &save);
@@ -754,10 +755,17 @@ auth:
             char *what = strtok_r(NULL, " ", &save);
             client_drop(what);
         }
+        else
+        {
+            /* we can't handle it, send it to the master */
+
+            send_master(REQ_EXECVERB, orig, strlen(orig) + 1);
+        }
 
     next_cmd:
 
         free(cmd);
+        free(orig);
     }
 
 done:

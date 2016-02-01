@@ -16,29 +16,40 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* You should use #pragma once everywhere. */
 #pragma once
+
+#include "globals.h"
 
 #include "room.h"
 
-/* utility functions */
-void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
-void __attribute__((format(printf,4,5))) debugf_real(const char*, int, const char*, const char *fmt, ...);
-void remove_cruft(char*);
-void all_upper(char*);
-void all_lower(char*);
+/* the verb API is modeled after that of obj_*, this allows for
+ * dynamic creation/deletion of verbs, but is also easily
+ * serializable.
+ *
+ * so, all verbs are part of a verb class, which has all of its
+ * callbacks.
+ */
 
-void write_string(int fd, const char *str);
-char *read_string(int fd);
+struct verb_t;
+struct verb_class_t {
+    const char *class_name;
 
-void write_roomid(int fd, room_id *id);
-room_id read_roomid(int fd);
+    void (*hook_exec)(struct verb_t*, char *args, user_t *user);
+};
 
-void write_bool(int fd, bool b);
-bool read_bool(int fd);
+struct verb_t {
+    char *name;
 
-void write_uint32(int fd, uint32_t i);
-uint32_t read_uint32(int fd);
+    struct verb_class_t *class;
+};
 
-void write_size(int fd, size_t);
-size_t read_size(int fd);
+struct verb_t *verb_new(const char *class);
+
+void verb_write(int fd, struct verb_t*);
+
+struct verb_t *verb_read(int fd);
+
+void verb_free(void *verb);
+
+/* free the verb_ module's internal data structures */
+void verb_shutdown(void);

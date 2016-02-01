@@ -34,6 +34,7 @@ struct hash_map {
     size_t table_sz;
     void (*free_key)(void *key);
     void (*free_data)(void *data);
+    void* (*dup_data)(void *data);
     size_t n_entries;
 };
 
@@ -279,7 +280,15 @@ void *hash_dup(void *ptr)
         if(!data)
             break;
         ptr = NULL;
+        if(map->dup_data)
+            data = map->dup_data(data);
         hash_insert(ret, key, data);
     }
     return ret;
+}
+
+void hash_setdupdata_cb(void *ptr, void *(*cb)(void*))
+{
+    struct hash_map *map = ptr;
+    map->dup_data = cb;
 }

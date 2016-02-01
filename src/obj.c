@@ -44,6 +44,8 @@ struct object_t *obj_new(const char *class_name)
 
     struct object_t *obj = calloc(1, sizeof(struct object_t));
 
+    obj->refcount = 1;
+
     obj->class = hash_lookup(obj_class_map, class_name);
     if(!obj->class)
     {
@@ -80,23 +82,24 @@ struct object_t *obj_read(int fd)
 
 struct object_t *obj_dup(struct object_t *obj)
 {
-    struct object_t *new = calloc(1, sizeof(struct object_t));
-    memcpy(new, obj, sizeof(*new));
-    new->name = strdup(obj->name);
-    new->userdata = obj->class->hook_clone(obj->userdata);
-    return new;
+    ++obj->refcount;
+    return obj;
 }
 
 void obj_free(void *ptr)
 {
     struct object_t *obj = ptr;
     debugf("Freeing obj %s\n", obj->name);
+    --obj->refcount;
 
-    if(obj->class->hook_destroy)
-        obj->class->hook_destroy(obj);
+    if(!obj->refcount)
+    {
+        if(obj->class->hook_destroy)
+            obj->class->hook_destroy(obj);
 
-    free(obj->name);
-    free(obj);
+        free(obj->name);
+        free(obj);
+    }
 }
 
 void obj_shutdown(void)

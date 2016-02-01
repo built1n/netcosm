@@ -132,3 +132,17 @@ void write_uint32(int fd, uint32_t b)
     if(write(fd, &b, sizeof(b)) != sizeof(b))
         error("write failed");
 }
+
+size_t read_size(int fd)
+{
+    size_t ret;
+    if(read(fd, &ret, sizeof(ret)) != sizeof(ret))
+        error("unexpected EOF");
+    return ret;
+}
+
+void write_size(int fd, size_t b)
+{
+    if(write(fd, &b, sizeof(b)) != sizeof(b))
+        error("write failed");
+}

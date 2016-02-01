@@ -21,6 +21,7 @@
 #include "hash.h"
 #include "server.h"
 #include "userdb.h"
+#include "world.h"
 
 /* sends a single packet to a child, virtually guarantees receipt */
 static void send_packet(struct child_data *child, unsigned char cmd,
@@ -47,8 +48,7 @@ tryagain:
     }
 }
 
-static void __attribute__((format(printf,2,3)))
-send_msg(struct child_data *child, const char *fmt, ...)
+void __attribute__((format(printf,2,3))) send_msg(struct child_data *child, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -381,6 +381,39 @@ static void req_listusers(unsigned char *data, size_t datalen, struct child_data
     }
 }
 
+static void req_execverb(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) datalen;
+    /* first look for a room-local verb */
+    char *save;
+    char *tok = strtok_r((char*)data, " \t", &save);
+
+    all_lower(tok);
+
+    debugf("server: exec verb '%s'\n", tok);
+
+    void *local_map = room_verb_map(sender->room);
+    struct verb_t *verb = hash_lookup(local_map, tok);
+    if(verb)
+        goto exec_verb;
+
+    /* now search the global map */
+    void *global_map = world_verb_map();
+    verb = hash_lookup(global_map, tok);
+
+    if(verb)
+        goto exec_verb;
+
+    send_msg(sender, "I don't know how to do that.\n");
+    return;
+
+    char *args;
+exec_verb:
+    args = strtok_r(NULL, "", &save);
+    debugf("args is %s\n", args);
+    verb->class->hook_exec(verb, args, sender);
+}
+
 static const struct child_request {
     unsigned char code;
 
@@ -402,9 +435,6 @@ static const struct child_request {
     {  REQ_KICK,            true,   CHILD_ALL,             req_kick_client,      NULL,               },
     {  REQ_KICKALL,         true,   CHILD_ALL_BUT_SENDER,  req_kick_always,      NULL,               },
     {  REQ_LISTCLIENTS,     false,  CHILD_ALL,             req_send_clientinfo,  req_send_geninfo,   },
-    {  REQ_WAIT,            false,  CHILD_NONE,            NULL,                 req_wait,           },
-    {  REQ_GETROOMDESC,     false,  CHILD_NONE,            NULL,                 req_send_desc,      },
-    {  REQ_GETROOMNAME,     false,  CHILD_NONE,            NULL,                 req_send_roomname,  },
     {  REQ_SETROOM,         true,   CHILD_NONE,            NULL,                 req_set_room,       },
     {  REQ_MOVE,            true,   CHILD_NONE,            NULL,                 req_move_room,      },
     {  REQ_GETUSERDATA,     true,   CHILD_NONE,            NULL,                 req_send_user,      },
@@ -412,8 +442,12 @@ static const struct child_request {
     {  REQ_ADDUSERDATA,     true,   CHILD_NONE,            NULL,                 req_add_user,       },
     {  REQ_LOOKAT,          true,   CHILD_NONE,            NULL,                 req_look_at,        },
     {  REQ_TAKE,            true,   CHILD_NONE,            NULL,                 req_take,           },
-    {  REQ_PRINTINVENTORY,  false,  CHILD_NONE,            NULL,                 req_inventory,      },
     {  REQ_DROP,            true,   CHILD_NONE,            NULL,                 req_drop,           },
+    {  REQ_EXECVERB,        true,   CHILD_NONE,            NULL,                 req_execverb        },
+    {  REQ_WAIT,            false,  CHILD_NONE,            NULL,                 req_wait,           },
+    {  REQ_GETROOMDESC,     false,  CHILD_NONE,            NULL,                 req_send_desc,      },
+    {  REQ_GETROOMNAME,     false,  CHILD_NONE,            NULL,                 req_send_roomname,  },
+    {  REQ_PRINTINVENTORY,  false,  CHILD_NONE,            NULL,                 req_inventory,      },
     {  REQ_LISTUSERS,       false,  CHILD_NONE,            NULL,                 req_listusers       },
     //{ REQ_ROOMMSG,     true,  CHILD_ALL,            req_send_room_msg,   NULL,           },
 };

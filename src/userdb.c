@@ -26,24 +26,15 @@
 static void *map = NULL;
 static char *db_file = NULL;
 
-static void free_userdata_and_objs(void *ptr)
+static void free_userdata(void *ptr)
 {
     struct userdata_t *data = ptr;
 
     if(data->objects)
     {
-        hash_setfreedata_cb(data->objects, obj_free);
         hash_free(data->objects);
         data->objects = NULL;
     }
-    free(data);
-}
-
-static void free_userdata(void *ptr)
-{
-    struct userdata_t *data = ptr;
-
-    hash_free(data->objects);
     free(data);
 }
 
@@ -86,6 +77,9 @@ void userdb_init(const char *file)
             data->objects = hash_init(MIN(8, n_objects),
                                       hash_djb,
                                       compare_strings);
+
+            hash_setfreedata_cb(data->objects, obj_free);
+            hash_setdupdata_cb(data->objects, (void*(*)(void*))obj_dup);
 
             for(unsigned i = 0; i < n_objects; ++i)
             {
@@ -163,6 +157,7 @@ struct userdata_t *userdb_add(struct userdata_t *data)
 
     /* don't overwrite their inventory */
     struct userdata_t *old = userdb_lookup(new->username);
+
     if(old && old->objects)
         new->objects = hash_dup(old->objects);
     else
@@ -188,7 +183,6 @@ void userdb_shutdown(void)
 
     if(map)
     {
-        hash_setfreedata_cb(map, free_userdata_and_objs);
         hash_free(map);
         map = NULL;
     }

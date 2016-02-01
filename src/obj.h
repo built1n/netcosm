@@ -52,9 +52,8 @@ struct obj_class_t {
      * NULL: can drop
      */
     bool (*hook_drop)(struct object_t*, user_t *user);
-    void* (*hook_clone)(void*); /* clone the user data pointer */
-    void (*hook_destroy)(struct object_t*);
-    const char* (*hook_desc)(struct object_t*, user_t*);
+    void (*hook_destroy)(struct object_t*); // free resources
+    const char* (*hook_desc)(struct object_t*, user_t*); // get object description
 };
 
 struct object_t {
@@ -63,6 +62,8 @@ struct object_t {
     struct obj_class_t *class;
 
     bool list;
+
+    unsigned refcount;
 
     void *userdata;
 };
@@ -76,10 +77,11 @@ void obj_write(int fd, struct object_t *obj);
 /* deserialize an object */
 struct object_t *obj_read(int fd);
 
-/* make a duplicate of an object
- * used for "moving" an object */
+/* this used to actually make a duplicate of an object...
+ * now it just increments its reference count */
 struct object_t *obj_dup(struct object_t *obj);
 
+/* this only frees the object if its reference count is zero */
 void obj_free(void*);
 
 /* shut down the obj_* module */

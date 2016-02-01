@@ -21,6 +21,7 @@
 #include "globals.h"
 
 #include "obj.h"
+#include "verb.h"
 
 /* Our world is an array of rooms, each having a list of objects in
    them, as well as actions that can be performed in the room. Objects
@@ -49,13 +50,6 @@ struct roomdata_t {
     void (* const hook_leave)(room_id room, user_t *user);
 };
 
-struct verb_t {
-    const char *name;
-
-    /* toks is strtok_r's pointer */
-    void (*execute)(const char *toks, user_t *user);
-};
-
 struct room_t {
     room_id id;
     struct roomdata_t data;
@@ -69,11 +63,6 @@ struct room_t {
 };
 
 /* room/world */
-void world_init(const struct roomdata_t *data, size_t sz, const char *name);
-bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz, const char *world_name);
-void world_save(const char *fname);
-
-struct room_t *room_get(room_id id);
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
 
@@ -94,4 +83,15 @@ size_t room_obj_count(room_id room);
 
 bool room_obj_del(room_id room, const char *name);
 
-void world_free(void);
+/* local verbs override global verbs */
+bool room_verb_add(room_id room, struct verb_t*);
+bool room_verb_del(room_id room, const char *verbname);
+
+/* get the local map of verbs */
+void *room_verb_map(room_id room);
+
+/* free a room and its resources */
+void room_free(struct room_t *room);
+
+/* semi-protected, should only be called from world_ */
+void room_init_maps(struct room_t *room);

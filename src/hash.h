@@ -89,3 +89,6 @@ void *hash_getkeyptr(void*, const void *key);
 size_t hash_size(void*);
 
 void *hash_dup(void*);
+
+/* sets the callback for when duplicating a data node */
+void hash_setdupdata_cb(void*, void *(*cb)(void*));

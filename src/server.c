@@ -23,6 +23,7 @@
 #include "server.h"
 #include "userdb.h"
 #include "util.h"
+#include "world.h"
 
 #define DEFAULT_PORT 1234
 #define BACKLOG 512
@@ -116,8 +117,14 @@ static void __attribute__((noreturn)) serv_cleanup(void)
 
     close(server_socket);
 
-    world_free();
+    /* shut down modules */
+    obj_shutdown();
     reqmap_free();
+    userdb_shutdown();
+    verb_shutdown();
+    world_free();
+
+    /* free internal data structures */
     hash_free(child_map);
     child_map = NULL;
 
@@ -125,14 +132,11 @@ static void __attribute__((noreturn)) serv_cleanup(void)
     hash_free(dir_map);
     dir_map = NULL;
 
-    userdb_shutdown();
-
-    obj_shutdown();
-
     extern char *current_user;
     if(current_user)
         free(current_user);
 
+    /* shut down libev */
     ev_default_destroy();
 
     exit(0);
@@ -254,23 +258,24 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
         /* child */
         are_child = true;
 
+        /* close our file descriptors */
         close(readpipe[0]);
         close(outpipe[1]);
         close(server_socket);
 
-        /* only the master process controls the world */
-        world_free();
+        /* shut down modules */
+        obj_shutdown();
         reqmap_free();
+        userdb_shutdown();
+        verb_shutdown();
+        world_free();
+
+        /* free our data structures */
         hash_free(child_map);
         child_map = NULL;
 
-        /* we don't need libev anymore */
+        /* shut down libev */
         ev_default_destroy();
-
-        /* user DB requests go through the master */
-        userdb_shutdown();
-
-        obj_shutdown();
 
         debugf("Child with PID %d spawned\n", getpid());
 

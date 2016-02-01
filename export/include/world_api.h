@@ -16,15 +16,9 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
 #include "globals.h"
 
-#include "room.h"
 #include "server.h"
-
-extern const struct obj_class_t netcosm_obj_classes[];
-extern const size_t netcosm_obj_classes_sz;
-
-extern const struct roomdata_t netcosm_world[];
-extern const size_t netcosm_world_sz;
-
-extern const char *netcosm_world_name;
+#include "world.h"

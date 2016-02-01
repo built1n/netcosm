@@ -43,6 +43,7 @@
 #define REQ_PRINTINVENTORY    21 /* server: print user inventory */
 #define REQ_DROP              22 /* server: drop user object if allowed */
 #define REQ_LISTUSERS         23 /* server: list users in USERFILE */
+#define REQ_EXECVERB          24 /* server: execute a verb with its arguments */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */
@@ -56,3 +57,5 @@ bool handle_child_req(int in_fd);
 void master_ack_handler(int s, siginfo_t *info, void *v);
 void reqmap_init(void);
 void reqmap_free(void);
+
+void send_msg(user_t *child, const char *fmt, ...) __attribute__((format(printf,2,3)));

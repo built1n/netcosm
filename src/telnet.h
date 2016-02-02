@@ -34,3 +34,5 @@ uint16_t telnet_get_height(void);
 
 void telnet_echo_on(void);
 void telnet_echo_off(void);
+
+void telnet_clear_screen(void);

@@ -374,9 +374,8 @@ static void req_listusers(unsigned char *data, size_t datalen, struct child_data
         if(!user)
             break;
 
-        send_msg(sender, "%s: priv: %d room: %d last: %s", user->username,
+        send_msg(sender, "%s: priv: %d last: %s", user->username,
                  user->priv,
-                 user->room,
                  ctime(&user->last_login));
     }
 }
@@ -404,7 +403,7 @@ static void req_execverb(unsigned char *data, size_t datalen, struct child_data 
     if(verb)
         goto exec_verb;
 
-    send_msg(sender, "I don't know how to do that.\n");
+    send_msg(sender, "I don't know what that means.\n");
     return;
 
     char *args;

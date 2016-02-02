@@ -75,6 +75,7 @@ static void add_user_internal(const char *name, const char *pass, int authlevel)
 
     /* doesn't need to be malloc'd */
     struct userdata_t userdata;
+    memset(&userdata, 0, sizeof(userdata));
 
     strncpy(userdata.username, name, sizeof(userdata.username));
     memcpy(userdata.passhash, hexhash, sizeof(userdata.passhash));

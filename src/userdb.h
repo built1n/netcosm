@@ -34,7 +34,8 @@ struct userdata_t {
     char passhash[AUTH_HASHLEN * 2 + 1];
 
     priv_t priv;
-    room_id room;
+
+    //room_id room;
     time_t last_login;
 
     void *objects; /* hash of object names -> objects */

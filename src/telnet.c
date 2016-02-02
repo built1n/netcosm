@@ -16,8 +16,9 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TELCMDS
+#define TELCMDS /* see <arpa/telnet.h> */
 #define TELOPTS
+
 #include "globals.h"
 
 #include "client.h"
@@ -131,4 +132,14 @@ void telnet_init(void)
     term_height = 24;
 
     out_raw(init_seq, ARRAYLEN(init_seq));
+}
+
+void telnet_clear_screen(void)
+{
+    /* ESC ] 2 J */
+    unsigned char clear_seq[] = { '\033',
+                                  ']',
+                                  '2',
+                                  'J' };
+    out_raw(clear_seq, ARRAYLEN(clear_seq));
 }

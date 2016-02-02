@@ -388,6 +388,7 @@ bool client_move(const char *dir)
         {  "IN",         DIR_IN    },
         {  "OUT",        DIR_OT    },
     };
+
     if(!dir_map)
     {
         dir_map = hash_init(ARRAYLEN(dirs), hash_djb, compare_strings);
@@ -445,6 +446,272 @@ void client_user_list(void)
 }
 
 #define WSPACE " \t\r\n"
+
+#define CMD_OK      0
+#define CMD_LOGOUT  1
+#define CMD_QUIT    2
+
+/*** callbacks ***/
+
+int user_cb(char **save)
+{
+    char *what = strtok_r(NULL, WSPACE, save);
+    if(!what)
+        return CMD_OK;
+
+    all_upper(what);
+
+    if(!strcmp(what, "DEL"))
+    {
+        char *user = strtok_r(NULL, WSPACE, save);
+        if(user)
+        {
+            if(strcmp(user, current_user) && auth_user_del(user))
+                out("Success.\n");
+            else
+                out("Failure.\n");
+        }
+        else
+        {
+            out("Usage: USER DEL <USERNAME>\n");
+        }
+    }
+    else if(!strcmp(what, "ADD") || !strcmp(what, "MODIFY"))
+    {
+        char *user = strtok_r(NULL, WSPACE, save);
+        if(user)
+        {
+            if(!strcmp(user, current_user))
+            {
+                out("Do not modify your own password using USER. User CHPASS instead.\n");
+                return CMD_OK;
+            }
+
+            out("Editing user '%s'\n", user);
+
+            out("New Password (_DO_NOT_USE_A_VALUABLE_PASSWORD_): ");
+
+            /* BAD BAD BAD BAD BAD BAD BAD CLEARTEXT PASSWORDS!!! */
+            char *pass = client_read_password();
+
+            out("Verify Password: ");
+            char *pass2 = client_read_password();
+
+            if(strcmp(pass, pass2))
+            {
+                memset(pass, 0, strlen(pass));
+                memset(pass2, 0, strlen(pass2));
+                free(pass);
+                free(pass2);
+                out("Failure.\n");
+                return CMD_OK;
+            }
+
+            out("Admin privileges [y/N]? ");
+            char *allow_admin = client_read();
+            int priv = PRIV_USER;
+            if(toupper(allow_admin[0]) == 'Y')
+                priv = PRIV_ADMIN;
+
+            free(allow_admin);
+
+            if(auth_user_add(user, pass, priv))
+                out("Success.\n");
+            else
+                out("Failure.\n");
+            memset(pass, 0, strlen(pass));
+            free(pass);
+        }
+        else
+            out("Usage: USER <ADD|MODIFY> <USERNAME>\n");
+    }
+    else if(!strcmp(what, "LIST"))
+    {
+        client_user_list();
+    }
+    else
+    {
+        out("Usage: USER <ADD|DEL|MODIFY|LIST> <ARGS>\n");
+    }
+
+    return CMD_OK;
+}
+
+int client_cb(char **save)
+{
+    char *what = strtok_r(NULL, WSPACE, save);
+    if(!what)
+    {
+        out("Usage: CLIENT <LIST|KICK> <PID>\n");
+        return CMD_OK;
+    }
+
+    all_upper(what);
+
+    if(!strcmp(what, "LIST"))
+    {
+        send_master(REQ_LISTCLIENTS, NULL, 0);
+    }
+    else if(!strcmp(what, "KICK"))
+    {
+        char *pid_s = strtok_r(NULL, WSPACE, save);
+        all_upper(pid_s);
+        if(pid_s)
+        {
+            if(!strcmp(pid_s, "ALL"))
+            {
+                const char *msg = "Kicking everyone...\n";
+                send_master(REQ_KICKALL, msg, strlen(msg));
+                return CMD_OK;
+            }
+            /* weird pointer voodoo */
+            /* TODO: simplify */
+            char pidbuf[MAX(sizeof(pid_t), MSG_MAX)];
+            char *end;
+            pid_t pid = strtol(pid_s, &end, 0);
+            if(pid == getpid())
+            {
+                out("You cannot kick yourself. Use EXIT instead.\n");
+                return CMD_OK;
+            }
+            else if(*end != '\0')
+            {
+                out("Expected a child PID after KICK.\n");
+                return CMD_OK;
+            }
+            memcpy(pidbuf, &pid, sizeof(pid));
+            int len = sizeof(pid_t) + snprintf(pidbuf + sizeof(pid_t),
+                                               sizeof(pidbuf) - sizeof(pid_t),
+                                               "You were kicked.\n");
+            send_master(REQ_KICK, pidbuf, len);
+            debugf("Success.\n");
+        }
+        else
+            out("Usage: CLIENT KICK <PID>\n");
+    }
+    return CMD_OK;
+}
+
+int quit_cb(char **save)
+{
+    (void) save;
+    return CMD_QUIT;
+}
+
+int say_cb(char **save)
+{
+    char buf[MSG_MAX];
+    char *what = strtok_r(NULL, "", save);
+    int len = snprintf(buf, sizeof(buf), "%s says %s\n", current_user, what);
+
+    send_master(REQ_BCASTMSG, buf, len);
+    return CMD_OK;
+}
+
+int date_cb(char **save)
+{
+    (void) save;
+    time_t t = time(NULL);
+    out("%s", ctime(&t));
+    return CMD_OK;
+}
+
+int logout_cb(char **save)
+{
+    (void) save;
+    out("Logged out.\n");
+    telnet_clear_screen();
+    return CMD_LOGOUT;
+}
+
+int look_cb(char **save)
+{
+    char *what = strtok_r(NULL, " ", save);
+    if(!what)
+        client_look();
+    else
+    {
+        client_look_at(what);
+    }
+    return CMD_OK;
+}
+
+int inventory_cb(char **save)
+{
+    (void) save;
+    client_inventory();
+    return CMD_OK;
+}
+
+int take_cb(char **save)
+{
+    char *what = strtok_r(NULL, " ", save);
+    client_take(what);
+    return CMD_OK;
+}
+
+int wait_cb(char **save)
+{
+    (void) save;
+    send_master(REQ_WAIT, NULL, 0);
+    return CMD_OK;
+}
+
+int go_cb(char **save)
+{
+    char *dir = strtok_r(NULL, WSPACE, save);
+    if(dir)
+    {
+        all_upper(dir);
+        if(client_move(dir))
+            client_look();
+    }
+    else
+        out("Expected direction after GO.\n");
+    return CMD_OK;
+}
+
+int drop_cb(char **save)
+{
+    char *what = strtok_r(NULL, " ", save);
+    client_drop(what);
+    return CMD_OK;
+}
+
+static const struct client_cmd {
+    const char *cmd;
+    int (*cb)(char **saveptr);
+    bool admin_only;
+} cmds[] = {
+    {  "USER",       user_cb,       true   },
+    {  "CLIENT",     client_cb,     true   },
+    {  "EXIT",       quit_cb,       false  },
+    {  "QUIT",       quit_cb,       false  },
+    {  "SAY",        say_cb,        false  },
+    {  "DATE",       date_cb,       false  },
+    {  "LOGOUT",     logout_cb,     false  },
+    {  "LOOK",       look_cb,       false  },
+    {  "INVENTORY",  inventory_cb,  false  },
+    {  "TAKE",       take_cb,       false  },
+    {  "WAIT",       wait_cb,       false  },
+    {  "GO",         go_cb,         false  },
+    {  "DROP",       drop_cb,       false  },
+};
+
+static void *cmd_map = NULL;
+
+void client_init(void)
+{
+    cmd_map = hash_init(ARRAYLEN(cmds), hash_djb, compare_strings);
+    hash_insert_pairs(cmd_map, (const struct hash_pair*)cmds, sizeof(cmds[0]), ARRAYLEN(cmds));
+}
+
+void client_shutdown(void)
+{
+    hash_free(cmd_map);
+    cmd_map = NULL;
+}
+
 
 void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
 {
@@ -539,232 +806,47 @@ auth:
     while(1)
     {
         out(">> ");
-        char *cmd = client_read();
-        char *orig = strdup(cmd);
+        char *line = client_read();
+        char *orig = strdup(line);
         char *save = NULL;
 
-        char *tok = strtok_r(cmd, WSPACE, &save);
+        char *tok = strtok_r(line, WSPACE, &save);
 
         if(!tok)
             goto next_cmd;
+
         all_upper(tok);
 
-        if(admin)
+        const struct client_cmd *cmd = hash_lookup(cmd_map, tok);
+        if(cmd && cmd->cb && (!cmd->admin_only || (cmd->admin_only && admin)))
         {
-            if(!strcmp(tok, "USER"))
+            int ret = cmd->cb(&save);
+            switch(ret)
             {
-                char *what = strtok_r(NULL, WSPACE, &save);
-                if(!what)
-                    goto next_cmd;
-
-                all_upper(what);
-
-                if(!strcmp(what, "DEL"))
-                {
-                    char *user = strtok_r(NULL, WSPACE, &save);
-                    if(user)
-                    {
-                    if(strcmp(user, current_user) && auth_user_del(user))
-                        out("Success.\n");
-                    else
-                        out("Failure.\n");
-                    }
-                    else
-                    {
-                        out("Usage: USER DEL <USERNAME>\n");
-                    }
-                }
-                else if(!strcmp(what, "ADD") || !strcmp(what, "MODIFY"))
-                {
-                    char *user = strtok_r(NULL, WSPACE, &save);
-                    if(user)
-                    {
-                        if(!strcmp(user, current_user))
-                        {
-                            out("Do not modify your own password using USER. User CHPASS instead.\n");
-                            goto next_cmd;
-                        }
-
-                        out("Editing user '%s'\n", user);
-
-                        out("New Password (_DO_NOT_USE_A_VALUABLE_PASSWORD_): ");
-
-                        /* BAD BAD BAD BAD BAD BAD BAD CLEARTEXT PASSWORDS!!! */
-                        char *pass = client_read_password();
-
-                        out("Verify Password: ");
-                        char *pass2 = client_read_password();
-
-                        if(strcmp(pass, pass2))
-                        {
-                            memset(pass, 0, strlen(pass));
-                            memset(pass2, 0, strlen(pass2));
-                            free(pass);
-                            free(pass2);
-                            out("Failure.\n");
-                            goto next_cmd;
-                        }
-
-                        out("Admin privileges [y/N]? ");
-                        char *allow_admin = client_read();
-                        int priv = PRIV_USER;
-                        if(toupper(allow_admin[0]) == 'Y')
-                            priv = PRIV_ADMIN;
-
-                        free(allow_admin);
-
-                        if(auth_user_add(user, pass, priv))
-                            out("Success.\n");
-                        else
-                            out("Failure.\n");
-                        memset(pass, 0, strlen(pass));
-                        free(pass);
-                    }
-                    else
-                        out("Usage: USER <ADD|MODIFY> <USERNAME>\n");
-                }
-                else if(!strcmp(what, "LIST"))
-                {
-                    client_user_list();
-                }
-                else
-                {
-                    out("Usage: USER <ADD|DEL|MODIFY|LIST> <ARGS>\n");
-                }
-            }
-            else if(!strcmp(tok, "CLIENT"))
-            {
-                char *what = strtok_r(NULL, WSPACE, &save);
-                if(!what)
-                {
-                    out("Usage: CLIENT <LIST|KICK> <PID>\n");
-                    goto next_cmd;
-                }
-
-                all_upper(what);
-
-                if(!strcmp(what, "LIST"))
-                {
-                    send_master(REQ_LISTCLIENTS, NULL, 0);
-                }
-                else if(!strcmp(what, "KICK"))
-                {
-                    char *pid_s = strtok_r(NULL, WSPACE, &save);
-                    all_upper(pid_s);
-                    if(pid_s)
-                    {
-                        if(!strcmp(pid_s, "ALL"))
-                        {
-                            const char *msg = "Kicking everyone...\n";
-                            send_master(REQ_KICKALL, msg, strlen(msg));
-                            goto next_cmd;
-                        }
-                        /* weird pointer voodoo */
-                        /* TODO: simplify */
-                        char pidbuf[MAX(sizeof(pid_t), MSG_MAX)];
-                        char *end;
-                        pid_t pid = strtol(pid_s, &end, 0);
-                        if(pid == getpid())
-                        {
-                            out("You cannot kick yourself. Use EXIT instead.\n");
-                            goto next_cmd;
-                        }
-                        else if(*end != '\0')
-                        {
-                            out("Expected a child PID after KICK.\n");
-                            goto next_cmd;
-                        }
-                        memcpy(pidbuf, &pid, sizeof(pid));
-                        int len = sizeof(pid_t) + snprintf(pidbuf + sizeof(pid_t),
-                                                           sizeof(pidbuf) - sizeof(pid_t),
-                                                           "You were kicked.\n");
-                        send_master(REQ_KICK, pidbuf, len);
-                        debugf("Success.\n");
-                    }
-                    else
-                        out("Usage: CLIENT KICK <PID>\n");
-                }
-            }
-            //else if(!strcmp(tok, "HANG"))
-            //{
-            //    send_master(REQ_HANG);
-            //}
-        }
-
-        /* unprivileged commands */
-        if(!strcmp(tok, "QUIT") || !strcmp(tok, "EXIT"))
-        {
-            free(cmd);
-            goto done;
-        }
-        else if(!strcmp(tok, "SAY"))
-        {
-            char buf[MSG_MAX];
-            char *what = strtok_r(NULL, "", &save);
-            int len = snprintf(buf, sizeof(buf), "%s says %s\n", current_user, what);
-
-            send_master(REQ_BCASTMSG, buf, len);
-        }
-        else if(!strcmp(tok, "DATE"))
-        {
-            time_t t = time(NULL);
-            out("%s", ctime(&t));
-        }
-        else if(!strcmp(tok, "LOGOUT"))
-        {
-            out("Logged out.\n");
-            goto auth;
-        }
-        else if(!strcmp(tok, "LOOK"))
-        {
-            char *what = strtok_r(NULL, " ", &save);
-            if(!what)
-                client_look();
-            else
-            {
-                client_look_at(what);
+            case CMD_OK:
+                goto next_cmd;
+            case CMD_LOGOUT:
+                goto auth;
+            case CMD_QUIT:
+                free(line);
+                free(orig);
+                goto done;
+            default:
+                error("client: bad callback return value");
             }
         }
-        else if(!strcmp(tok, "INVENTORY"))
+        else if(cmd && cmd->admin_only && !admin)
         {
-            client_inventory();
+            out("You are not allowed to do that.\n");
+            goto next_cmd;
         }
-        else if(!strcmp(tok, "TAKE"))
-        {
-            char *what = strtok_r(NULL, " ", &save);
-            client_take(what);
-        }
-        else if(!strcmp(tok, "WAIT"))
-        {
-            send_master(REQ_WAIT, NULL, 0);
-        }
-        else if(!strcmp(tok, "GO"))
-        {
-            char *dir = strtok_r(NULL, WSPACE, &save);
-            if(dir)
-            {
-                all_upper(dir);
-                if(client_move(dir))
-                    client_look();
-            }
-            else
-                out("Expected direction after GO.\n");
-        }
-        else if(!strcmp(tok, "DROP"))
-        {
-            char *what = strtok_r(NULL, " ", &save);
-            client_drop(what);
-        }
-        else
-        {
-            /* we can't handle it, send it to the master */
 
-            send_master(REQ_EXECVERB, orig, strlen(orig) + 1);
-        }
+        /* if we can't handle it, let the master process try */
+        send_master(REQ_EXECVERB, orig, strlen(orig) + 1);
 
     next_cmd:
 
-        free(cmd);
+        free(line);
         free(orig);
     }
 

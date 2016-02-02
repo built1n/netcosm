@@ -43,3 +43,7 @@ void out_raw(const void*, size_t);
 
 /* called for every client */
 void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);
+
+/* can (and should) be called before forking the child */
+void client_init(void);
+void client_shutdown(void);

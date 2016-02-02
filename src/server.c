@@ -118,6 +118,7 @@ static void __attribute__((noreturn)) serv_cleanup(void)
     close(server_socket);
 
     /* shut down modules */
+    client_shutdown();
     obj_shutdown();
     reqmap_free();
     userdb_shutdown();
@@ -380,27 +381,31 @@ static void parse_args(int argc, char *argv[])
 static SIMP_HASH(pid_t, pid_hash);
 static SIMP_EQUAL(pid_t, pid_equal);
 
-int server_main(int argc, char *argv[])
+static void check_libs(void)
 {
     debugf("*** Starting NetCosm %s (libev %d.%d, %s) ***\n",
            NETCOSM_VERSION, EV_VERSION_MAJOR, EV_VERSION_MINOR, OPENSSL_VERSION_TEXT);
-
     assert(ev_version_major() == EV_VERSION_MAJOR &&
            ev_version_minor() >= EV_VERSION_MINOR);
+}
+
+int server_main(int argc, char *argv[])
+{
+    check_libs();
 
     parse_args(argc, argv);
-
-    srand(time(0));
 
     server_socket = server_bind();
 
     userdb_init(USERFILE);
 
     check_userfile();
-
     load_worldfile();
 
     reqmap_init();
+
+    /* save some time after a fork() */
+    client_init();
 
     /* this initial size very low to make iteration faster */
     child_map = hash_init(16, pid_hash, pid_equal);
@@ -409,7 +414,7 @@ int server_main(int argc, char *argv[])
 
     debugf("Listening on port %d\n", port);
 
-    struct ev_loop *loop = EV_DEFAULT;
+    struct ev_loop *loop = ev_default_loop(0);
 
     /* we initialize signals after creating the default event loop
      * because libev grabs SIGCHLD */
@@ -418,10 +423,12 @@ int server_main(int argc, char *argv[])
     ev_io server_watcher;
     ev_io_init(&server_watcher, new_connection_cb, server_socket, EV_READ);
     ev_set_priority(&server_watcher, EV_MAXPRI);
+
     ev_io_start(EV_A_ &server_watcher);
 
     atexit(serv_cleanup);
 
+    /* everything's ready, hand it over to libev */
     ev_loop(loop, 0);
 
     /* should never get here */

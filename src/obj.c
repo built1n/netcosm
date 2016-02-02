@@ -82,18 +82,20 @@ struct object_t *obj_read(int fd)
 
 struct object_t *obj_dup(struct object_t *obj)
 {
+    debugf("Adding an object reference.\n");
     ++obj->refcount;
     return obj;
 }
 
 void obj_free(void *ptr)
 {
+    debugf("Freeing an object reference.\n");
     struct object_t *obj = ptr;
-    debugf("Freeing obj %s\n", obj->name);
     --obj->refcount;
 
     if(!obj->refcount)
     {
+        debugf("Freeing obj %s\n", obj->name);
         if(obj->class->hook_destroy)
             obj->class->hook_destroy(obj);
 

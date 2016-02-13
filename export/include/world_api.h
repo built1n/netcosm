@@ -21,4 +21,7 @@
 #include "globals.h"
 
 #include "server.h"
+#include "hash.h"
+#include "multimap.h"
+#include "userdb.h"
 #include "world.h"

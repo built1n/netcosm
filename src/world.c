@@ -19,6 +19,7 @@
 #include "globals.h"
 
 #include "hash.h"
+#include "multimap.h"
 #include "room.h"
 #include "world.h"
 #include "userdb.h"
@@ -40,6 +41,7 @@ void world_save(const char *fname)
     write_uint32(fd, WORLD_MAGIC);
     write(fd, &world_sz, sizeof(world_sz));
     write_string(fd, world_name);
+    write_uint64(fd, obj_get_idcounter());
 
     /* write all the global verbs */
     void *global_verbs = world_verb_map();
@@ -82,11 +84,18 @@ void world_save(const char *fname)
         void *save;
         while(1)
         {
-            struct object_t *obj = room_obj_iterate(id, &save);
-            if(!obj)
+            const struct multimap_list *iter = room_obj_iterate(id, &save, NULL);
+            if(!iter)
                 break;
-            id = ROOM_NONE;
-            obj_write(fd, obj);
+            while(iter)
+            {
+                struct object_t *obj = iter->val;
+                if(!obj)
+                    break;
+                id = ROOM_NONE;
+                obj_write(fd, obj);
+                iter = iter->next;
+            }
         }
 
         /* and now all the verbs... */
@@ -158,6 +167,8 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
         return false;
     }
 
+    obj_set_idcounter(read_uint64(fd));
+
     size_t n_global_verbs = read_size(fd);
     for(unsigned i = 0; i < n_global_verbs; ++i)
     {
@@ -185,8 +196,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
         {
             struct object_t *obj = obj_read(fd);
 
-            if(!room_obj_add(i, obj))
-                error("duplicate object name in room '%s'", world[i].data.name);
+            room_obj_add(i, obj);
         }
 
         /* read room-local verbs */

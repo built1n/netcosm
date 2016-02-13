@@ -38,7 +38,7 @@ struct userdata_t {
     //room_id room;
     time_t last_login;
 
-    void *objects; /* hash of object names -> objects */
+    void *objects; /* multihash of object names -> objects */
 };
 
 /* call before using anything else */
@@ -55,16 +55,13 @@ size_t userdb_size(void);
 /*
  * adds an entry to the DB
  * if it already exists, OVERWRITE
- * returns a pointer to the added entry, NULL on failure
- *
- * a DUPLICATE of the entry will be inserted
  */
-struct userdata_t *userdb_add(struct userdata_t*);
+bool userdb_add(struct userdata_t*);
 
 void userdb_shutdown(void);
 
 /* save the DB to disk */
-void userdb_write(const char*);
+bool userdb_write(const char*);
 
 /* *save should be set to NULL on the first run */
 struct userdata_t *userdb_iterate(void **save);
@@ -73,3 +70,4 @@ struct userdata_t *userdb_iterate(void **save);
 struct userdata_t *userdb_request_lookup(const char *name);
 bool userdb_request_add(struct userdata_t *data);
 bool userdb_request_remove(const char *name);
+void userdb_dump(void);

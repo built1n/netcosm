@@ -19,6 +19,7 @@
 #include "globals.h"
 
 #include "hash.h"
+#include "multimap.h"
 #include "server.h"
 #include "room.h"
 #include "userdb.h"
@@ -35,7 +36,10 @@ bool room_user_add(room_id id, struct child_data *child)
     if(child->user)
     {
         /* hash_insert returns NULL on success */
-        return !hash_insert(room->users, child->user, child);
+        bool ret = !hash_insert(room->users, child->user, child);
+        if(room->data.hook_enter)
+            room->data.hook_enter(id, child);
+        return ret;
     }
     else
         return false;
@@ -46,7 +50,12 @@ bool room_user_del(room_id id, struct child_data *child)
     struct room_t *room = room_get(id);
 
     if(child->user)
-        return hash_remove(room->users, child->user);
+    {
+        bool ret = hash_remove(room->users, child->user);
+        if(room->data.hook_leave)
+            room->data.hook_leave(id, child);
+        return ret;
+    }
     else
         return false;
 }
@@ -56,7 +65,7 @@ void room_free(struct room_t *room)
     hash_free(room->users);
     room->users = NULL;
 
-    hash_free(room->objects);
+    multimap_free(room->objects);
     room->objects = NULL;
 
     hash_free(room->verbs);
@@ -68,30 +77,42 @@ void room_free(struct room_t *room)
 
 bool room_obj_add(room_id room, struct object_t *obj)
 {
-    return !hash_insert(room_get(room)->objects, obj->name, obj);
+    return !multimap_insert(room_get(room)->objects, obj->name, obj);
 }
 
-struct object_t *room_obj_iterate(room_id room, void **save)
+const struct multimap_list *room_obj_iterate(room_id room, void **save, size_t *n_pairs)
 {
     if(room != ROOM_NONE)
-        return hash_iterate(room_get(room)->objects, save, NULL);
+        return multimap_iterate(room_get(room)->objects, save, n_pairs);
     else
-        return hash_iterate(NULL, save, NULL);
+        return multimap_iterate(NULL, save, n_pairs);
 }
 
-struct object_t *room_obj_get(room_id room, const char *name)
+const struct multimap_list *room_obj_get(room_id room, const char *name)
 {
-    return hash_lookup(room_get(room)->objects, name);
+    return multimap_lookup(room_get(room)->objects, name, NULL);
+}
+
+const struct multimap_list *room_obj_get_size(room_id room, const char *name, size_t *n_objs)
+{
+    return multimap_lookup(room_get(room)->objects, name, n_objs);
 }
 
 size_t room_obj_count(room_id room)
 {
-    return hash_size(room_get(room)->objects);
+    return multimap_size(room_get(room)->objects);
 }
 
 bool room_obj_del(room_id room, const char *name)
 {
-    return hash_remove(room_get(room)->objects, name);
+    return multimap_delete_all(room_get(room)->objects, name);
+}
+
+bool room_obj_del_id(room_id room, const char *name, obj_id id)
+{
+    struct object_t tmp;
+    tmp.id = id;
+    return multimap_delete(room_get(room)->objects, name, &tmp);
 }
 
 #define OBJMAP_SIZE 8
@@ -102,8 +123,8 @@ void room_init_maps(struct room_t *room)
 {
     room->users = hash_init((userdb_size() / 2) + 1, hash_djb, compare_strings);
 
-    room->objects = hash_init(OBJMAP_SIZE, hash_djb, compare_strings);
-    hash_setfreedata_cb(room->objects, obj_free);
+    room->objects = multimap_init(OBJMAP_SIZE, hash_djb, compare_strings_nocase, obj_compare);
+    multimap_setfreedata_cb(room->objects, obj_free);
 
     room->verbs = hash_init(VERBMAP_SZ,
                             hash_djb,

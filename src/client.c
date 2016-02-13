@@ -80,7 +80,7 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
     while(ptr[pos])
     {
         bool is_newline = (ptr[pos] == '\n');
-        if(is_newline || pos >= line_width)
+        if(is_newline || pos >= line_width - 1)
         {
             if(is_newline || !last_space)
                 last_space = pos;
@@ -270,8 +270,16 @@ bool poll_requests(void)
         size_t datalen = packetlen - 1;
         packet[MSG_MAX] = '\0';
 
-        if(packetlen <= 0)
+        /* no data yet */
+        if(packetlen < 0)
             goto fail;
+
+        /* parent closed pipe */
+        if(!packetlen)
+        {
+            debugf("master process died\n");
+            exit(0);
+        }
 
         got_cmd = true;
 
@@ -285,6 +293,7 @@ bool poll_requests(void)
             break;
         }
         case REQ_KICK:
+
         {
             out((char*)data, datalen);
             exit(EXIT_SUCCESS);
@@ -626,7 +635,7 @@ int logout_cb(char **save)
 
 int look_cb(char **save)
 {
-    char *what = strtok_r(NULL, " ", save);
+    char *what = strtok_r(NULL, "", save);
     if(!what)
         client_look();
     else
@@ -645,7 +654,7 @@ int inventory_cb(char **save)
 
 int take_cb(char **save)
 {
-    char *what = strtok_r(NULL, " ", save);
+    char *what = strtok_r(NULL, "", save);
     client_take(what);
     return CMD_OK;
 }
@@ -673,7 +682,7 @@ int go_cb(char **save)
 
 int drop_cb(char **save)
 {
-    char *what = strtok_r(NULL, " ", save);
+    char *what = strtok_r(NULL, "", save);
     client_drop(what);
     return CMD_OK;
 }
@@ -826,6 +835,8 @@ auth:
             case CMD_OK:
                 goto next_cmd;
             case CMD_LOGOUT:
+                free(line);
+                free(orig);
                 goto auth;
             case CMD_QUIT:
                 free(line);

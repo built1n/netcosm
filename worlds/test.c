@@ -2,104 +2,69 @@
 
 /************ ROOM DEFINITIONS ************/
 
-static void portal_init(room_id id)
+static void deadend_init(room_id id)
 {
-    debugf("portal room init.\n");
-    struct object_t *new = obj_new("weapon");
-    new->name = strdup("sword");
+    struct object_t *new = obj_new("/generic");
+    new->name = strdup("shovel");
+    new->userdata = strdup("It is a normal shovel with a price tag attached that says $19.99.");
     new->list = true;
-    new->userdata = malloc(sizeof(double));
-    double p = 3.14159265358979323846L;
-    memcpy(new->userdata, &p, sizeof(p));
+    room_obj_add(id, new);
+    new = obj_copy(new);
+    if(!room_obj_add(id, new))
+        error("failed to add obj");
+}
+
+static void ew_road_init(room_id id)
+{
+    struct object_t *new = obj_new("/generic/notake");
+    new->name = strdup("large boulder");
+    new->userdata = strdup("It is just a boulder.  It cannot be moved.");
+    new->list = true;
     room_obj_add(id, new);
 }
 
-static bool no_take(struct object_t *obj, user_t *user)
+static void fork_init(room_id id)
 {
-    (void)obj; (void)user;
-    return false;
-}
-
-static void road_sign_init(room_id id)
-{
-    struct object_t *new = obj_new("sign");
-    new->name = strdup("sign");
-    new->list = true;
-    new->userdata = strdup("The sign reads,\n\nThe Great Road\n==============\nAlagart -- 35km");
-
-    room_obj_add(id, new);
-
-    struct verb_t *verb = verb_new("read");
-    verb->name = strdup("read");
-    room_verb_add(id, verb);
+    struct verb_t *new = verb_new("dig");
+    new->name = strdup("dig");
+    room_verb_add(id, new);
 }
 
 const struct roomdata_t netcosm_world[] = {
     {
-        "portal_room",
-        "Portal Room",
-        "You stand in the middle of a stone room. In to the east lies a portal to the world. Above it, there is a sign that reads `Alacron, 238 A.B.A.`.",
-        { NONE_N, NONE_NE, "world_start", NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, "world_start", NONE_OT },
-        portal_init,
+        "dead_end",
+        "Dead End",
+        "You are at a dead end of a dirt road.  The road goes to the east. In the distance you can see that it will eventually fork off. The trees here are very tall royal palms, and they are spaced equidistant from each other.",
+        { NONE_N, NONE_NE, "ew_road", NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        deadend_init,
         NULL,
         NULL,
     },
 
     {
-        "world_start",
-        "Beride Town Square",
-        "You are in the Beride town square. All around you there are people hurrying to get along. To the north stands a statue of the late King Ajax IV, and to the east is the Great Road. There are exits in all four directions.",
-        { "beride_square_n_statue", NONE_NE, "great_road_1", NONE_SE, "beride_square_s", NONE_SW, "beride_square_w", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
-        NULL,
-        NULL,
-        NULL,
-    },
-
-    {
-        "beride_square_n_statue",
-        "King Ajax IV Statue",
-        "Your path is blocked by an enormous bronze statue. A plaque on the pedestal reads,\n\nKing Ajax IV\n\n182 - 238 A.B.A.\n\nTo the south is the Beride Town Square.",
-        { NONE_N, NONE_NE, NONE_E, NONE_SE, "world_start", NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
-        NULL,
+        "ew_road",
+        "E/W Dirt road",
+        "You are on the continuation of a dirt road. There are more trees on both sides of you. The road continues to the east and west.",
+        { NONE_N, NONE_NE, "fork", NONE_SE, NONE_S, NONE_SW, "dead_end", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        ew_road_init,
         NULL,
         NULL,
     },
 
     {
-        "great_road_1",
-        "Great Road",
-        "You are at the start of a long, winding east-west road through the plains. Directly to your west is Beride.",
-        { NONE_N, NONE_NE, "great_road_2", NONE_SE, NONE_S, NONE_SW, "world_start", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
-        road_sign_init,
-        NULL,
-        NULL,
-    },
-
-
-    {
-        "great_road_2",
-        "Great Road",
-        "You are on a long, winding east-west road through the plains. To your west you can make out a town.",
-        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, "great_road_1", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
-        NULL,
+        "fork",
+        "Fork",
+        "You are at a fork of two passages, one to the northeast, and one to the southeast. The ground here seems very soft. You can also go back west.",
+        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, "ew_road", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        fork_init,
         NULL,
         NULL,
     },
 
     {
-        "beride_square_w",
-        "Bottomless Pit",
-        "You take a step onto what seems to be solid rock, but your foot unexplicably slips through it, leading you to lose your balance and slip into the bottomless abyss...",
-        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
-        NULL,
-        NULL,
-        NULL,
-    },
-
-    {
-        "beride_square_s",
-        "Bottomless Pit",
-        "You take a step onto what seems to be solid rock, but your foot unexplicably slips through it, leading you to lose your balance and slip into the bottomless abyss...",
+        "senw_road",
+        "SE/NW road",
+        "You are on a southeast/northwest road.",
         { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
         NULL,
         NULL,
@@ -108,113 +73,120 @@ const struct roomdata_t netcosm_world[] = {
 };
 
 const size_t netcosm_world_sz = ARRAYLEN(netcosm_world);
-const char *netcosm_world_name = "Alacron 0.1";
+const char *netcosm_world_name = "Dunnet 0.1";
 
 /************ OBJECT DEFINITIONS ************/
 
-const char *shiny(struct object_t *obj, user_t *user)
-{
-    if(user->state == STATE_ADMIN)
-    {
-        static char buf[128];
-        double *d = obj->userdata;
-        snprintf(buf, sizeof(buf), "It has %f written on it.", *d);
-        return buf;
-    }
-    else
-        return "It's kinda shiny.";
-}
-
-static void weap_serialize(int fd, struct object_t *obj)
-{
-    if(obj->userdata)
-        write(fd, obj->userdata, sizeof(double));
-}
-
-static void weap_deserialize(int fd, struct object_t *obj)
-{
-    obj->userdata = malloc(sizeof(double));
-    read(fd, obj->userdata, sizeof(double));
-}
-
-static void weap_destroy(struct object_t *obj)
-{
-    free(obj->userdata);
-    obj->userdata = NULL;
-}
-
-static void sign_write(int fd, struct object_t *obj)
+static void generic_ser(int fd, struct object_t *obj)
 {
     write_string(fd, obj->userdata);
 }
 
-static void sign_read(int fd, struct object_t *obj)
+static void generic_deser(int fd, struct object_t *obj)
 {
     obj->userdata = read_string(fd);
 }
 
-static void sign_free(struct object_t *obj)
+static void generic_destroy(struct object_t *obj)
 {
     free(obj->userdata);
 }
 
-static const char *sign_desc(struct object_t *obj, user_t *user)
+static const char *generic_desc(struct object_t *obj, user_t *user)
 {
-   (void) user;
+    (void) user;
     return obj->userdata;
 }
 
+static void *generic_dup(struct object_t *obj)
+{
+    return strdup(obj->userdata);
+}
+
+static bool no_take(struct object_t *obj, user_t *user)
+{
+    (void) obj; (void) user;
+    return false;
+}
+
 const struct obj_class_t netcosm_obj_classes[] = {
+    /* a generic, takable object class with userdata as its description */
     {
-        "weapon",
-        weap_serialize,
-        weap_deserialize,
+        "/generic",
+        generic_ser,
+        generic_deser,
         NULL,
         NULL,
-        weap_destroy,
-        shiny
+        generic_destroy,
+        generic_desc,
+        generic_dup,
     },
 
+    /* a generic, non-takable object class */
     {
-        "sign",
-        sign_write, // serialize
-        sign_read,  // deserialize
-        no_take,    // take
-        NULL,       // drop
-        sign_free,  // destroy
-        sign_desc
-    },
+        "/generic/notake",
+        generic_ser,
+        generic_deser,
+        no_take,
+        NULL,
+        generic_destroy,
+        generic_desc,
+        generic_dup,
+    }
 };
 
 const size_t netcosm_obj_classes_sz = ARRAYLEN(netcosm_obj_classes);
 
 /**************** VERB DEFINITIONS ****************/
 
-static void read_exec(struct verb_t *verb, char *args, user_t *user)
+static void dig_exec(struct verb_t *verb, char *args, user_t *user)
 {
     (void) verb;
-    char *save;
-    if(!args)
+    (void) args;
+    if(!multimap_lookup(userdb_lookup(user->user)->objects, "shovel", NULL))
     {
-        send_msg(user, "Read what?\n");
+        send_msg(user, "You have nothing with which to dig.\n");
         return;
     }
-    char *what = strtok_r(args, " ", &save);
-    struct object_t *obj = room_obj_get(user->room, what);
-    if(obj)
+
+    if(!strcmp(room_get(user->room)->data.name, "Fork"))
     {
-        if(!strcmp(obj->class->class_name, "sign"))
-            send_msg(user, "%s\n", obj->class->hook_desc(obj, user));
+        if(!room_obj_get(user->room, "cpu"))
+        {
+            struct object_t *new = obj_new("/generic");
+            new->name = strdup("CPU card");
+            new->userdata = strdup("The CPU board has a VAX chip on it.  It seems to have 2 Megabytes of RAM onboard.");
+            new->list = true;
+            room_obj_add(user->room, new);
+            send_msg(user, "I think you found something.\n");
+        }
         else
-            send_msg(user, "You can't read that.\n");
+        {
+            goto nothing;
+        }
     }
-    else
-        send_msg(user, "I don't know what that is.\n");
+
+    return;
+
+nothing:
+    send_msg(user, "Digging here reveals nothing.\n");
 }
 
 const struct verb_class_t netcosm_verb_classes[] = {
-    { "read",
-      read_exec },
+    { "dig",
+      dig_exec },
+    /*
+    { "shake",
+      shake_exec },
+    { "climb",
+      climb_exec },
+    { "put",
+      put_exec },
+    { "eat",
+      eat_exec },
+    { "feed",
+      feed_exec },
+    */
 };
 
 const size_t netcosm_verb_classes_sz = ARRAYLEN(netcosm_verb_classes);

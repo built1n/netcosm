@@ -18,6 +18,9 @@
 
 #include "hash.h"
 
+#include "util.h" // for error()
+
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -28,6 +31,7 @@ struct hash_node {
 };
 
 struct hash_map {
+    char sentinel; /* for avoiding hash/multihash confusion */
     unsigned (*hash)(const void *data);
     int (*compare)(const void *a, const void *b);
     struct hash_node **table;
@@ -37,6 +41,8 @@ struct hash_map {
     void* (*dup_data)(void *data);
     size_t n_entries;
 };
+
+#define CHECK_SENTINEL(map) do{if(map && ((struct hash_map*)map)->sentinel!=HASH_SENTINEL)error("hash/multimap mixing");}while(0);
 
 unsigned hash_djb(const void *ptr)
 {
@@ -51,10 +57,15 @@ unsigned hash_djb(const void *ptr)
     return hash;
 }
 
-/* wrapper to supress warnings */
+/* wrappers to suppress warnings */
 int compare_strings(const void *a, const void *b)
 {
     return strcmp(a,b);
+}
+
+int compare_strings_nocase(const void *a, const void *b)
+{
+    return strcasecmp(a,b);
 }
 
 void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
@@ -63,6 +74,7 @@ void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
     struct hash_map *ret = calloc(sizeof(struct hash_map), 1);
     if(!sz)
         sz = 1;
+    ret->sentinel = HASH_SENTINEL;
     ret->table = calloc(sz, sizeof(struct hash_node*));
     ret->table_sz = sz;
     ret->hash = hash_fn;
@@ -74,14 +86,22 @@ void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
 
 void hash_setfreekey_cb(void *ptr, void (*cb)(void *key))
 {
-    struct hash_map *map = ptr;
-    map->free_key = cb;
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        map->free_key = cb;
+    }
 }
 
 void hash_setfreedata_cb(void *ptr, void (*cb)(void *data))
 {
-    struct hash_map *map = ptr;
-    map->free_data = cb;
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        map->free_data = cb;
+    }
 }
 
 void hash_free(void *ptr)
@@ -89,6 +109,7 @@ void hash_free(void *ptr)
     if(ptr)
     {
         struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
         for(unsigned i = 0; i < map->table_sz; ++i)
         {
             struct hash_node *node = map->table[i];
@@ -125,6 +146,7 @@ void *hash_iterate(void *map, void **saveptr, void **keyptr)
         saved = *saveptr;
 
         saved->map = map;
+        CHECK_SENTINEL(map);
         saved->bucket = 0;
         saved->node = NULL;
     }
@@ -152,55 +174,108 @@ void *hash_iterate(void *map, void **saveptr, void **keyptr)
     return NULL;
 }
 
+void hash_overwrite(void *ptr, const void *key, const void *data)
+{
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        unsigned hash = map->hash(key) % map->table_sz;
+
+        struct hash_node *iter = map->table[hash];
+        struct hash_node *last = NULL;
+
+        while(iter)
+        {
+            if(map->compare(key, iter->key) == 0)
+            {
+                if(map->free_data)
+                    map->free_data((void*)iter->data);
+                if(map->free_key)
+                    map->free_key((void*)iter->key);
+
+                iter->key = key;
+                iter->data = data;
+
+                return;
+            }
+            last = iter;
+            iter = iter->next;
+        }
+
+        /* insert */
+        struct hash_node *new = calloc(sizeof(struct hash_node), 1);
+        new->key = key;
+        new->data = data;
+        new->next = NULL;
+        if(!last)
+            map->table[hash] = new;
+        else
+            last->next = new;
+        ++map->n_entries;
+    }
+}
+
 void *hash_insert(void *ptr, const void *key, const void *data)
 {
-    struct hash_map *map = ptr;
-    unsigned hash = map->hash(key) % map->table_sz;
-
-    struct hash_node *iter = map->table[hash];
-    struct hash_node *last = NULL;
-
-    while(iter)
+    if(ptr)
     {
-        if(map->compare(key, iter->key) == 0)
-            return (void*)(iter->data);
-        last = iter;
-        iter = iter->next;
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        unsigned hash = map->hash(key) % map->table_sz;
+
+        struct hash_node *iter = map->table[hash];
+        struct hash_node *last = NULL;
+
+        while(iter)
+        {
+            if(map->compare(key, iter->key) == 0)
+                return (void*)(iter->data);
+            last = iter;
+            iter = iter->next;
+        }
+
+        /* insert */
+        struct hash_node *new = calloc(sizeof(struct hash_node), 1);
+        new->key = key;
+        new->data = data;
+        new->next = NULL;
+        if(!last)
+            map->table[hash] = new;
+        else
+            last->next = new;
+        ++map->n_entries;
+        /* fall through */
     }
-
-    /* insert */
-    struct hash_node *new = calloc(sizeof(struct hash_node), 1);
-    new->key = key;
-    new->data = data;
-    new->next = NULL;
-    if(!last)
-        map->table[hash] = new;
-    else
-        last->next = new;
-    ++map->n_entries;
-
     return NULL;
 }
 
 void *hash_lookup(void *ptr, const void *key)
 {
-    struct hash_map *map = ptr;
-    unsigned hash = map->hash(key) % map->table_sz;
-
-    struct hash_node *iter = map->table[hash];
-
-    while(iter)
+    if(ptr)
     {
-        if(map->compare(key, iter->key) == 0)
-            return (void*)(iter->data);
-        iter = iter->next;
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        unsigned hash = map->hash(key) % map->table_sz;
+
+        struct hash_node *iter = map->table[hash];
+
+        while(iter)
+        {
+            if(map->compare(key, iter->key) == 0)
+                return (void*)(iter->data);
+            iter = iter->next;
+        }
+        /* fall through */
     }
+
     return NULL;
 }
 
 void hash_insert_pairs(void *ptr, const struct hash_pair *pairs,
                        size_t pairsize, size_t n)
 {
+    CHECK_SENTINEL(ptr);
     const char *iter = (const char*)pairs;
     for(unsigned i = 0; i < n; ++i)
     {
@@ -212,83 +287,108 @@ void hash_insert_pairs(void *ptr, const struct hash_pair *pairs,
 
 bool hash_remove(void *ptr, const void *key)
 {
-    struct hash_map *map = ptr;
-    unsigned hash = map->hash(key) % map->table_sz;
-
-    struct hash_node *iter = map->table[hash], *last = NULL;
-
-    while(iter)
+    if(ptr)
     {
-        if(map->compare(key, iter->key) == 0)
-        {
-            if(last)
-                last->next = iter->next;
-            else
-                map->table[hash] = iter->next;
-            if(map->free_key)
-                map->free_key((void*)iter->key);
-            if(map->free_data)
-                map->free_data((void*)iter->data);
-            --map->n_entries;
-            free(iter);
-            return true;
-        }
-        last = iter;
-        iter = iter->next;
-    }
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        unsigned hash = map->hash(key) % map->table_sz;
 
+        struct hash_node *iter = map->table[hash], *last = NULL;
+
+        while(iter)
+        {
+            if(map->compare(key, iter->key) == 0)
+            {
+                if(last)
+                    last->next = iter->next;
+                else
+                    map->table[hash] = iter->next;
+                if(map->free_key)
+                    map->free_key((void*)iter->key);
+                if(map->free_data)
+                    map->free_data((void*)iter->data);
+                --map->n_entries;
+                free(iter);
+                return true;
+            }
+            last = iter;
+            iter = iter->next;
+        }
+        /* fall through */
+    }
     return false;
 }
 
 void *hash_getkeyptr(void *ptr, const void *key)
 {
-    struct hash_map *map = ptr;
-    unsigned hash = map->hash(key) % map->table_sz;
-
-    struct hash_node *iter = map->table[hash];
-
-    while(iter)
+    if(ptr)
     {
-        if(map->compare(key, iter->key) == 0)
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        unsigned hash = map->hash(key) % map->table_sz;
+
+        struct hash_node *iter = map->table[hash];
+
+        while(iter)
+        {
+            if(map->compare(key, iter->key) == 0)
             return (void*)(iter->key);
-        iter = iter->next;
+            iter = iter->next;
+        }
+        /* fall through */
     }
     return NULL;
 }
 
 size_t hash_size(void *ptr)
 {
-    struct hash_map *map = ptr;
-    return map->n_entries;
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        return map->n_entries;
+    }
+    else
+        return 0;
 }
 
 void *hash_dup(void *ptr)
 {
-    struct hash_map *map = ptr;
-
-    struct hash_map *ret = calloc(1, sizeof(struct hash_map));
-    memcpy(ret, map, sizeof(*ret));
-
-    ret->table = calloc(ret->table_sz, sizeof(struct hash_node*));
-    ret->n_entries = 0;
-
-    void *save;
-    while(1)
+    if(ptr)
     {
-        void *key;
-        void *data = hash_iterate(ptr, &save, &key);
-        if(!data)
-            break;
-        ptr = NULL;
-        if(map->dup_data)
-            data = map->dup_data(data);
-        hash_insert(ret, key, data);
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+
+        struct hash_map *ret = calloc(1, sizeof(struct hash_map));
+        memcpy(ret, map, sizeof(*ret));
+
+        ret->table = calloc(ret->table_sz, sizeof(struct hash_node*));
+        ret->n_entries = 0;
+
+        void *save = NULL;
+        while(1)
+        {
+            void *key;
+            void *data = hash_iterate(ptr, &save, &key);
+            if(!data)
+                break;
+            ptr = NULL;
+            if(map->dup_data)
+                data = map->dup_data(data);
+            hash_insert(ret, key, data);
+        }
+        return ret;
     }
-    return ret;
+    else
+        return NULL;
 }
 
 void hash_setdupdata_cb(void *ptr, void *(*cb)(void*))
 {
-    struct hash_map *map = ptr;
-    map->dup_data = cb;
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        map->dup_data = cb;
+    }
 }

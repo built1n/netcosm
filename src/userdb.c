@@ -20,6 +20,7 @@
 
 #include "client.h"
 #include "hash.h"
+#include "multimap.h"
 #include "server.h"
 #include "userdb.h"
 
@@ -32,7 +33,7 @@ static void free_userdata(void *ptr)
 
     if(data->objects)
     {
-        hash_free(data->objects);
+        multimap_free(data->objects);
         data->objects = NULL;
     }
     free(data);
@@ -57,7 +58,8 @@ void userdb_init(const char *file)
     {
         if(read_uint32(fd) != USERDB_MAGIC)
             error("bad userdb magic value");
-        while(1)
+        size_t n_users = read_size(fd);
+        for(size_t u = 0; u < n_users; ++u)
         {
             struct userdata_t *data = calloc(1, sizeof(*data));
 
@@ -71,20 +73,21 @@ void userdb_init(const char *file)
             if(read(fd, &n_objects, sizeof(n_objects)) != sizeof(n_objects))
             {
                 free(data);
-                break;
+                error("unexpected EOF");
             }
 
-            data->objects = hash_init(MIN(8, n_objects),
-                                      hash_djb,
-                                      compare_strings);
+            data->objects = multimap_init(MIN(8, n_objects),
+                                          hash_djb,
+                                          compare_strings_nocase,
+                                          obj_compare);
 
-            hash_setfreedata_cb(data->objects, obj_free);
-            hash_setdupdata_cb(data->objects, (void*(*)(void*))obj_dup);
+            multimap_setfreedata_cb(data->objects, obj_free);
+            multimap_setdupdata_cb(data->objects, (void*(*)(void*))obj_dup);
 
             for(unsigned i = 0; i < n_objects; ++i)
             {
                 struct object_t *obj = obj_read(fd);
-                hash_insert(data->objects, obj->name, obj);
+                multimap_insert(data->objects, obj->name, obj);
             }
 
             hash_insert(map, data->username, data);
@@ -94,10 +97,15 @@ void userdb_init(const char *file)
     }
 }
 
-void userdb_write(const char *file)
+bool userdb_write(const char *file)
 {
+    debugf("Writing userdb...\n");
+
     int fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if(fd < 0)
+        return false;
     write_uint32(fd, USERDB_MAGIC);
+    write_size(fd, hash_size(map));
     void *save, *ptr = map;
     while(1)
     {
@@ -110,7 +118,7 @@ void userdb_write(const char *file)
 
         size_t n_objects;
         if(user->objects)
-            n_objects = hash_size(user->objects);
+            n_objects = multimap_size(user->objects);
         else
             n_objects = 0;
 
@@ -123,15 +131,26 @@ void userdb_write(const char *file)
             void *objptr = user->objects, *objsave;
             while(1)
             {
-                struct object_t *obj = hash_iterate(objptr, &objsave, NULL);
-                if(!obj)
+                const struct multimap_list *iter = multimap_iterate(objptr, &objsave, NULL);
+
+                if(!iter)
                     break;
                 objptr = NULL;
-                obj_write(fd, obj);
+
+                while(iter)
+                {
+                    debugf("Writing an object to disk...\n");
+                    obj_write(fd, iter->val);
+                    iter = iter->next;
+                }
             }
         }
     }
     close(fd);
+
+    debugf("Done writing userdb.\n");
+
+    return true;
 }
 
 struct userdata_t *userdb_lookup(const char *key)
@@ -149,9 +168,9 @@ bool userdb_remove(const char *key)
     return false;
 }
 
-/* returns NULL on success */
-struct userdata_t *userdb_add(struct userdata_t *data)
+bool userdb_add(struct userdata_t *data)
 {
+    userdb_dump();
     struct userdata_t *new = calloc(1, sizeof(*new)); /* only in C! */
     memcpy(new, data, sizeof(*new));
 
@@ -159,21 +178,50 @@ struct userdata_t *userdb_add(struct userdata_t *data)
     struct userdata_t *old = userdb_lookup(new->username);
 
     if(old && old->objects)
-        new->objects = hash_dup(old->objects);
-    else
-        new->objects = hash_init(8, hash_djb, compare_strings);
-
-    struct userdata_t *ret;
-
-    if((ret = hash_insert(map, new->username, new))) /* already exists */
     {
-        hash_remove(map, new->username);
-        ret = hash_insert(map, new->username, new);
+        new->objects = multimap_dup(old->objects);
+    }
+    else
+    {
+        new->objects = multimap_init(8, hash_djb, compare_strings_nocase, obj_compare);
+
+        multimap_setdupdata_cb(new->objects, (void*(*)(void*))obj_dup);
+        multimap_setfreedata_cb(new->objects, obj_free);
     }
 
-    userdb_write(db_file);
+    hash_overwrite(map, new->username, new);
 
-    return ret;
+    return userdb_write(db_file);
+}
+
+void userdb_dump(void)
+{
+    debugf("*** User Inventories Dump ***\n");
+    void *userptr = map, *usersave = NULL;
+    while(1)
+    {
+        struct userdata_t *user = hash_iterate(userptr, &usersave, NULL);
+        if(!user)
+            break;
+        userptr = NULL;
+        void *objptr = user->objects, *objsave;
+        debugf("User %s:\n", user->username);
+        while(1)
+        {
+            const struct multimap_list *iter = multimap_iterate(objptr, &objsave, NULL);
+
+            if(!iter)
+                break;
+            objptr = NULL;
+
+            while(iter)
+            {
+                struct object_t *obj = iter->val;
+                debugf(" - Obj #%lu class %s: name %s\n", obj->id, obj->class->class_name, obj->name);
+                iter = iter->next;
+            }
+        }
+    }
 }
 
 void userdb_shutdown(void)
@@ -216,7 +264,10 @@ struct userdata_t *userdb_request_lookup(const char *name)
     {
         send_master(REQ_GETUSERDATA, name, strlen(name) + 1);
         if(reqdata_type == TYPE_USERDATA)
+        {
+            returned_reqdata.userdata.objects = NULL;
             return &returned_reqdata.userdata;
+        }
         return NULL;
     }
     else

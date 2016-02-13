@@ -16,17 +16,24 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
 #include <stdbool.h>
 #include <stddef.h>
 
-#pragma once
-
 /* simple, generic chained hash map implementation */
+/* no duplicate keys are allowed */
+/* O(n) insertion */
+
+/* for telling containers apart */
+#define HASH_SENTINEL 0x10
+#define MULTIMAP_SENTINEL 0x11
 
 unsigned hash_djb(const void*);
 int compare_strings(const void*, const void*);
+int compare_strings_nocase(const void*, const void*);
 
-void *hash_init(size_t tabsz, unsigned (*hash_fn)(const void*),
+void *hash_init(size_t tabsz, unsigned (*hash_fn)(const void *key),
                 int (*compare_key)(const void*, const void*));
 
 void hash_setfreedata_cb(void*, void (*cb)(void *data));
@@ -46,6 +53,9 @@ void hash_free(void*);
  * new pair (a.k.a. failure)
  */
 void *hash_insert(void*, const void *key, const void *data);
+
+/* overwrite an existing key/value pair with a new one */
+void hash_overwrite(void*, const void *key, const void *data);
 
 /* returns NULL if not found */
 void *hash_lookup(void*, const void *key);
@@ -83,7 +93,7 @@ void *hash_getkeyptr(void*, const void *key);
 #define SIMP_EQUAL(TYPE, NAME)                                          \
     int NAME (const void *a, const void *b)                             \
     {                                                                   \
-        return !(*((const TYPE*)a) == *((const TYPE*)b));               \
+        return memcmp((a), (b), sizeof(TYPE));                          \
     }
 
 size_t hash_size(void*);

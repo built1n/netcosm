@@ -40,5 +40,10 @@ bool read_bool(int fd);
 void write_uint32(int fd, uint32_t i);
 uint32_t read_uint32(int fd);
 
+void write_uint64(int fd, uint64_t i);
+uint64_t read_uint64(int fd);
+
 void write_size(int fd, size_t);
 size_t read_size(int fd);
+
+bool is_vowel(char c);

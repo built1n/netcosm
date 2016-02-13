@@ -96,10 +96,10 @@ char *read_string(int fd)
         error("read_string: EOF");
     }
     char *ret = malloc(sz + 1);
-    if(read(fd, ret, sz) < 0)
+    if((size_t)read(fd, ret, sz) != sz)
     {
         free(ret);
-        return NULL;
+        error("read_string: EOF");
     }
     ret[sz] = '\0';
     return ret;
@@ -133,6 +133,20 @@ void write_uint32(int fd, uint32_t b)
         error("write failed");
 }
 
+uint64_t read_uint64(int fd)
+{
+    uint64_t ret;
+    if(read(fd, &ret, sizeof(ret)) != sizeof(ret))
+        error("unexpected EOF");
+    return ret;
+}
+
+void write_uint64(int fd, uint64_t b)
+{
+    if(write(fd, &b, sizeof(b)) != sizeof(b))
+        error("write failed");
+}
+
 size_t read_size(int fd)
 {
     size_t ret;
@@ -145,4 +159,19 @@ void write_size(int fd, size_t b)
 {
     if(write(fd, &b, sizeof(b)) != sizeof(b))
         error("write failed");
+}
+
+bool is_vowel(char c)
+{
+    switch(tolower(c))
+    {
+    case 'a':
+    case 'e':
+    case 'i':
+    case 'o':
+    case 'u':
+        return true;
+    default:
+        return false;
+    }
 }

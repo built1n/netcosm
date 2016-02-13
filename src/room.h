@@ -57,7 +57,7 @@ struct room_t {
     room_id adjacent[NUM_DIRECTIONS];
 
     /* hash maps */
-    void *objects; /* object name -> object */
+    void *objects; /* multimap of object name -> object */
     void *verbs;
     void *users; /* username -> child_data */
 };
@@ -66,22 +66,24 @@ struct room_t {
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
 
-/* on the first call, room should be a valid room id, and *save should
+/* On the first call, room should be a valid room id, and *save should
  * point to a void pointer. On subsequent calls, room should be
  * ROOM_NONE, and *save should remain unchanged from the previous
- * call */
-struct object_t *room_obj_iterate(room_id room, void **save);
+ * call. This call returns a LINKED LIST of objects with the same
+ * name every time it is called, not individual objects. */
+const struct multimap_list *room_obj_iterate(room_id room, void **save, size_t *n_pairs);
 
 /* new should point to a new object allocated with obj_new(), with
  * 'name' properly set */
 bool room_obj_add(room_id room, struct object_t *obj);
 
-/* obj should be all lowercase */
-struct object_t *room_obj_get(room_id room, const char *obj);
-
-size_t room_obj_count(room_id room);
+const struct multimap_list *room_obj_get(room_id room, const char *obj);
+const struct multimap_list *room_obj_get_size(room_id room, const char *name, size_t *n_objs);
 
 bool room_obj_del(room_id room, const char *name);
+bool room_obj_del_id(room_id room, const char *name, obj_id id);
+
+size_t room_obj_count(room_id room);
 
 /* local verbs override global verbs */
 bool room_verb_add(room_id room, struct verb_t*);

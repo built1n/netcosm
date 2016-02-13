@@ -49,6 +49,7 @@ void __attribute__((noreturn)) error(const char *fmt, ...)
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     perror(buf);
+    abort();
     exit(EXIT_FAILURE);
 }
 

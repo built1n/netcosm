@@ -24,6 +24,18 @@
 /* map of class names -> object classes */
 static void *obj_class_map = NULL;
 
+static obj_id idcounter = 1;
+
+obj_id obj_get_idcounter(void)
+{
+    return idcounter;
+}
+
+void obj_set_idcounter(obj_id c)
+{
+    idcounter = c;
+}
+
 struct object_t *obj_new(const char *class_name)
 {
     if(!obj_class_map)
@@ -44,21 +56,26 @@ struct object_t *obj_new(const char *class_name)
 
     struct object_t *obj = calloc(1, sizeof(struct object_t));
 
-    obj->refcount = 1;
-
     obj->class = hash_lookup(obj_class_map, class_name);
+
     if(!obj->class)
     {
         free(obj);
         error("unknown object class '%s'", class_name);
     }
-    else
-        return obj;
+
+    obj->id = idcounter++;
+    obj->refcount = 1;
+
+    return obj;
 }
 
 void obj_write(int fd, struct object_t *obj)
 {
     write_string(fd, obj->class->class_name);
+
+    write_uint64(fd, obj->id);
+
     write_string(fd, obj->name);
     write_bool(fd, obj->list);
 
@@ -72,6 +89,8 @@ struct object_t *obj_read(int fd)
     struct object_t *obj = obj_new(class_name);
     free(class_name);
 
+    obj->id = read_uint64(fd);
+
     obj->name = read_string(fd);
     obj->list = read_bool(fd);
     if(obj->class->hook_deserialize)
@@ -80,22 +99,32 @@ struct object_t *obj_read(int fd)
     return obj;
 }
 
+struct object_t *obj_copy(struct object_t *obj)
+{
+    struct object_t *ret = obj_new(obj->class->class_name);
+    ret->name = strdup(obj->name);
+    ret->list = obj->list;
+    ret->userdata = obj->class->hook_dupdata(obj);
+    return ret;
+}
+
 struct object_t *obj_dup(struct object_t *obj)
 {
-    debugf("Adding an object reference.\n");
+    debugf("Adding an object reference for #%lu.\n", obj->id);
     ++obj->refcount;
     return obj;
 }
 
 void obj_free(void *ptr)
 {
-    debugf("Freeing an object reference.\n");
     struct object_t *obj = ptr;
     --obj->refcount;
 
+    debugf("Freeing an object reference for #%lu (%s, %d).\n", obj->id, obj->name, obj->refcount);
+
     if(!obj->refcount)
     {
-        debugf("Freeing obj %s\n", obj->name);
+        debugf("Freeing object #%lu\n", obj->id);
         if(obj->class->hook_destroy)
             obj->class->hook_destroy(obj);
 
@@ -108,4 +137,10 @@ void obj_shutdown(void)
 {
     hash_free(obj_class_map);
     obj_class_map = NULL;
+}
+
+int obj_compare(const void *a, const void *b)
+{
+    const struct object_t *c = a, *d = b;
+    return !(c->id == d->id);
 }

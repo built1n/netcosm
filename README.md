@@ -33,8 +33,6 @@ on your system in order for things to work.
 
 ## Todo List
 
-* Verbs
-
 * Game scripting
 
 * NPCs

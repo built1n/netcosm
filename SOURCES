@@ -1,5 +1,6 @@
 src/auth.c
 src/client.c
+src/client_reqs.c
 src/hash.c
 src/main.c
 src/multimap.c

@@ -412,24 +412,26 @@ static void req_drop(unsigned char *data, size_t datalen, struct child_data *sen
         return;
 
     size_t n_objs;
-    const struct multimap_list *list = multimap_lookup(user->objects, (const char*)data, &n_objs);
-    if(n_objs != 1)
-    {
-        send_msg(sender, "FIXME: unimplemented %s.\n", data);
-        return;
-    }
-    struct object_t *obj = list->val;
-    if(!obj)
+    const struct multimap_list *iter = multimap_lookup(user->objects, (const char*)data, &n_objs);
+
+    if(!iter)
     {
         send_msg(sender, "You don't have that.\n");
         return;
     }
 
-    struct object_t *dup = obj_dup(obj);
-    room_obj_add(sender->room, dup);
-    multimap_delete_all(user->objects, (const char*)data);
+    while(iter)
+    {
+        struct object_t *obj = iter->val;
 
-    send_msg(sender, "Dropped.\n");
+        struct object_t *dup = obj_dup(obj);
+        room_obj_add(sender->room, dup);
+
+        send_msg(sender, "Dropped.\n");
+        iter = iter->next;
+    }
+
+    multimap_delete_all(user->objects, (const char*)data);
 
     world_save(WORLDFILE);
     userdb_write(USERFILE);

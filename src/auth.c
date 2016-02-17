@@ -224,8 +224,3 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
     sleep(2);
     return NULL;
 }
-
-void auth_user_list(void)
-{
-    /* FIXME: todo */
-}

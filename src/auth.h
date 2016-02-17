@@ -42,6 +42,3 @@ struct userdata_t *auth_check(const char *user, const char *pass);
 
 bool auth_user_add(const char *user, const char *pass, int authlevel);
 bool auth_user_del(const char *user);
-
-/* lists users through out() */
-void auth_user_list(void);

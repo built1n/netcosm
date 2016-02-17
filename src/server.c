@@ -106,7 +106,7 @@ static void handle_client(int fd, struct sockaddr_in *addr,
     client_main(fd, addr, nclients, to, from);
 }
 
-static void __attribute__((noreturn)) serv_cleanup(void)
+static void __attribute__((noreturn)) server_cleanup(void)
 {
     if(!are_child)
         debugf("Shutdown server.\n");
@@ -427,7 +427,7 @@ int server_main(int argc, char *argv[])
 
     ev_io_start(EV_A_ &server_watcher);
 
-    atexit(serv_cleanup);
+    atexit(server_cleanup);
 
     /* everything's ready, hand it over to libev */
     ev_loop(loop, 0);

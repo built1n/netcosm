@@ -16,27 +16,31 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* You should use #pragma once everywhere. */
 #pragma once
 
 #include "globals.h"
 
-#include "client_reqs.h"
-#include "room.h"
+#include "server.h"
+#include "server_reqs.h"
 #include "userdb.h"
 
-extern int client_fd, to_parent, from_parent;
-extern bool are_admin;
+enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN } reqdata_type;
 
-/* call from child process ONLY */
-void send_master(unsigned char cmd, const void *data, size_t sz);
+union reqdata_t {
+    struct userdata_t userdata;
+    bool boolean;
+};
 
-void out(const char *fmt, ...) __attribute__((format(printf,1,2)));
-void out_raw(const void*, size_t);
+extern enum reqdata_typespec reqdata_type;
+extern union reqdata_t returned_reqdata;
 
-/* called for every client */
-void client_main(int sock, struct sockaddr_in *addr, int, int to_parent, int from_parent);
-
-/* can (and should) be called before forking the child */
-void client_init(void);
-void client_shutdown(void);
+void client_change_room(room_id id);
+void client_change_user(const char *user);
+void client_change_state(int state);
+bool client_move(const char *dir);
+void client_look(void);
+void client_look_at(char *obj);
+void client_inventory(void);
+void client_drop(char *what);
+void client_user_list(void);
+void client_take(char *obj);

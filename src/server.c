@@ -40,17 +40,18 @@ static uint16_t port = DEFAULT_PORT;
 
 static int server_socket;
 
-void __attribute__((noreturn)) error(const char *fmt, ...)
+#define SAVE_INTERVAL 8
+
+/* saves state periodically */
+void server_save_state(bool force)
 {
-    char buf[128];
-    memset(buf, 0, sizeof(buf));
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    perror(buf);
-    abort();
-    exit(EXIT_FAILURE);
+    static int n = 0;
+    n = (n + 1) % SAVE_INTERVAL;
+    if(!n || force)
+    {
+        world_save(WORLDFILE);
+        userdb_write(USERFILE);
+    }
 }
 
 static void free_child_data(void *ptr)

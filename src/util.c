@@ -17,7 +17,19 @@
  */
 
 #include "globals.h"
-#include <sys/resource.h>
+
+void __attribute__((noreturn)) error(const char *fmt, ...)
+{
+    char buf[128];
+    memset(buf, 0, sizeof(buf));
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    perror(buf);
+    abort();
+    exit(EXIT_FAILURE);
+}
 
 void remove_cruft(char *str)
 {

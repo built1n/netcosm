@@ -46,3 +46,4 @@ extern void *child_map;
 extern bool are_child;
 
 int server_main(int argc, char *argv[]);
+void server_save_state(bool force);

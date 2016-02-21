@@ -165,23 +165,30 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
             break;
 
         const char *name = iter->key;
-        if(n_objs == 1)
+        struct object_t *obj = iter->val;
+        if(!strcmp(name, obj->name))
         {
-            char *article = (is_vowel(name[0])?"an":"a");
-            strlcat(buf, "There is ", sizeof(buf));
-            strlcat(buf, article, sizeof(buf));
-            strlcat(buf, " ", sizeof(buf));
-            strlcat(buf, name, sizeof(buf));
-            strlcat(buf, " here.\n", sizeof(buf));
-        }
-        else
-        {
-            strlcat(buf, "There are ", sizeof(buf));
-            char n[32];
-            snprintf(n, sizeof(n), "%lu ", n_objs);
-            strlcat(buf, n, sizeof(buf));
-            strlcat(buf, name, sizeof(buf));
-            strlcat(buf, "s here.\n", sizeof(buf));
+            if(n_objs == 1)
+            {
+                char *article = (is_vowel(name[0])?"an":"a");
+                strlcat(buf, "There is ", sizeof(buf));
+                if(obj->default_article)
+                {
+                    strlcat(buf, article, sizeof(buf));
+                    strlcat(buf, " ", sizeof(buf));
+                }
+                strlcat(buf, name, sizeof(buf));
+                strlcat(buf, " here.\n", sizeof(buf));
+            }
+            else
+            {
+                strlcat(buf, "There are ", sizeof(buf));
+                char n[32];
+                snprintf(n, sizeof(n), "%lu ", n_objs);
+                strlcat(buf, n, sizeof(buf));
+                strlcat(buf, name, sizeof(buf));
+                strlcat(buf, "s here.\n", sizeof(buf));
+            }
         }
     }
 
@@ -286,18 +293,13 @@ static void req_kick_always(unsigned char *data, size_t datalen,
     send_packet(child, REQ_KICK, data, datalen);
 }
 
-static void req_look_at(unsigned char *data, size_t datalen, struct child_data *sender)
+static int print_objlist(struct child_data *sender, const struct multimap_list *list, int idx, size_t n_objs)
 {
-    (void) datalen;
-    debugf("Looking at '%s'\n", data);
-    size_t n_objs;
-    const struct multimap_list *iter = room_obj_get_size(sender->room, (const char*)data, &n_objs);
-    if(iter)
+    if(list)
     {
-        int idx = 1; // index of the object
-        while(iter)
+        while(list)
         {
-            struct object_t *obj = iter->val;
+            struct object_t *obj = list->val;
 
             const char *desc = obj->class->hook_desc(obj, sender);
             if(n_objs > 1)
@@ -305,13 +307,37 @@ static void req_look_at(unsigned char *data, size_t datalen, struct child_data *
             else
                 send_msg(sender, "%s\n", desc);
 
-            iter = iter->next;
+            list = list->next;
         }
     }
-    else
+    return idx;
+}
+
+static void req_look_at(unsigned char *data, size_t datalen, struct child_data *sender)
+{
+    (void) datalen;
+    debugf("Looking at '%s'\n", data);
+    size_t n_objs = 0, tmp;
+
+    const struct multimap_list *room_list = room_obj_get_size(sender->room, (const char*)data, &n_objs);
+    const struct multimap_list *inv_list = multimap_lookup(userdb_lookup(sender->user)->objects, data, &tmp);
+
+    int idx = 1; // index of the object
+    n_objs += tmp;
+
+    if(room_list)
     {
-        send_msg(sender, "I don't know what that is.\n");
+        send_msg(sender, "In room:\n");
+        idx = print_objlist(sender, room_list, idx, n_objs);
     }
+    if(inv_list)
+    {
+        send_msg(sender, "In inventory:\n");
+        idx = print_objlist(sender, inv_list, idx, n_objs);
+    }
+
+    if(!room_list && !inv_list)
+        send_msg(sender, "I don't know what that is.\n");
 }
 
 static void req_take(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -332,9 +358,7 @@ static void req_take(unsigned char *data, size_t datalen, struct child_data *sen
                     return;
                 }
 
-                struct object_t *dup = obj_dup(obj);
-                multimap_insert(userdb_lookup(sender->user)->objects,
-                                dup->name, dup);
+                userdb_add_obj(sender->user, obj);
 
                 send_msg(sender, "Taken.\n");
             }
@@ -345,8 +369,7 @@ static void req_take(unsigned char *data, size_t datalen, struct child_data *sen
 
         room_obj_del(sender->room, (const char*)data);
 
-        world_save(WORLDFILE);
-        userdb_write(USERFILE);
+        server_save_state(false);
     }
     else
     {
@@ -377,25 +400,32 @@ static void req_inventory(unsigned char *data, size_t datalen, struct child_data
         buf[0] = '\0';
 
         const char *name = iter->key;
-        if(n_objs == 1)
+        struct object_t *obj = iter->val;
+        if(!strcmp(name, obj->name))
         {
-            char *article = (is_vowel(name[0])?"An":"A");
-            strlcat(buf, article, sizeof(buf));
-            strlcat(buf, " ", sizeof(buf));
-            strlcat(buf, name, sizeof(buf));
-            strlcat(buf, "\n", sizeof(buf));
-        }
-        else
-        {
-            char n[32];
-            snprintf(n, sizeof(n), "%lu", n_objs);
-            strlcat(buf, n, sizeof(buf));
-            strlcat(buf, " ", sizeof(buf));
-            strlcat(buf, name, sizeof(buf));
-            strlcat(buf, "s\n", sizeof(buf));
-        }
+            if(n_objs == 1)
+            {
+                if(obj->default_article)
+                {
+                    char *article = (is_vowel(name[0])?"An":"A");
+                    strlcat(buf, article, sizeof(buf));
+                    strlcat(buf, " ", sizeof(buf));
+                }
+                strlcat(buf, name, sizeof(buf));
+                strlcat(buf, "\n", sizeof(buf));
+            }
+            else
+            {
+                char n[32];
+                snprintf(n, sizeof(n), "%lu", n_objs);
+                strlcat(buf, n, sizeof(buf));
+                strlcat(buf, " ", sizeof(buf));
+                strlcat(buf, name, sizeof(buf));
+                strlcat(buf, "s\n", sizeof(buf));
+            }
 
-        send_packet(sender, REQ_BCASTMSG, buf, strlen(buf));
+            send_packet(sender, REQ_BCASTMSG, buf, strlen(buf));
+        }
     }
     if(ptr)
         send_msg(sender, "Nothing!\n");
@@ -433,8 +463,7 @@ static void req_drop(unsigned char *data, size_t datalen, struct child_data *sen
 
     multimap_delete_all(user->objects, (const char*)data);
 
-    world_save(WORLDFILE);
-    userdb_write(USERFILE);
+    server_save_state(false);
 }
 
 static void req_listusers(unsigned char *data, size_t datalen, struct child_data *sender)

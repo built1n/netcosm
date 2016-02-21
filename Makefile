@@ -34,7 +34,7 @@ INCLUDES = -I src/ -I export/include/
 
 WARNFLAGS = -Wall -Wextra -Wshadow -fno-strict-aliasing
 
-OPTFLAGS = -O3
+OPTFLAGS = -Og
 DEBUGFLAGS = -g
 
 CFLAGS = $(OPTFLAGS) $(DEBUGFLAGS) $(WARNFLAGS) -std=c99 $(INCLUDES)
@@ -99,4 +99,25 @@ depend: $(DEPS)
 
 .PHONY: install
 install: $(OUT)
-	@install build/unix.bin $(PREFIX)/bin/netcosm
+	@install $(OUT) $(PREFIX)/bin/netcosm
+
+.PHONY: copysrc
+copysrc:
+	@cp -R src $(BUILDDIR)
+	@cp -R worlds $(BUILDDIR)
+
+.PHONY: help
+help:
+	@echo "Build targets:"
+	@echo "  all (default)"
+	@echo "  depend"
+	@echo
+	@echo "Cleaning targets:"
+	@echo "  clean"
+	@echo "  veryclean"
+	@echo
+	@echo "Helper targets:"
+	@echo "  setcap"
+	@echo "  install"
+	@echo "  copysrc"
+	@echo "  help"

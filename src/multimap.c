@@ -203,11 +203,17 @@ size_t multimap_delete(void *ptr, const void *key, const void *val)
             next = iter->next;
             if(!map->compare_val(val, iter->val))
             {
+                if(map->free_data)
+                    map->free_data(iter->val);
+                if(map->free_key)
+                    map->free_key((void*)iter->key);
+
                 if(last)
                     last->next = iter->next;
                 else
                     node->list = iter->next;
                 free(iter);
+
                 ++deleted;
                 --node->n_pairs;
                 --map->total_pairs;
@@ -250,9 +256,9 @@ size_t multimap_delete_all(void *ptr, const void *key)
     return 0;
 }
 
-const struct multimap_list *multimap_iterate(void *ptr, void **save, size_t *n_pairs)
+const struct multimap_list *multimap_iterate(const void *ptr, void **save, size_t *n_pairs)
 {
-    struct multimap_t *map = ptr;
+    const struct multimap_t *map = ptr;
     CHECK_SENTINEL(map);
 
     struct multimap_node *node;

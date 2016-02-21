@@ -22,7 +22,6 @@
 #include "multimap.h"
 #include "room.h"
 #include "world.h"
-#include "userdb.h"
 
 /* processed world data */
 
@@ -38,10 +37,11 @@ struct room_t *room_get(room_id id)
 void world_save(const char *fname)
 {
     int fd = open(fname, O_CREAT | O_WRONLY, 0644);
+
     write_uint32(fd, WORLD_MAGIC);
+
     write(fd, &world_sz, sizeof(world_sz));
     write_string(fd, world_name);
-    write_uint64(fd, obj_get_idcounter());
 
     /* write all the global verbs */
     void *global_verbs = world_verb_map();
@@ -77,7 +77,7 @@ void world_save(const char *fname)
 
         /* now we serialize all the objects in this room */
 
-        size_t n_objects = room_obj_count(i);
+        size_t n_objects = room_obj_count_noalias(i);
         write(fd, &n_objects, sizeof(n_objects));
 
         room_id id = i;
@@ -87,13 +87,15 @@ void world_save(const char *fname)
             const struct multimap_list *iter = room_obj_iterate(id, &save, NULL);
             if(!iter)
                 break;
+            id = ROOM_NONE;
             while(iter)
             {
                 struct object_t *obj = iter->val;
                 if(!obj)
                     break;
-                id = ROOM_NONE;
-                obj_write(fd, obj);
+                const char *name = iter->key;
+                if(!strcmp(name, obj->name))
+                   obj_write(fd, obj);
                 iter = iter->next;
             }
         }
@@ -111,7 +113,14 @@ void world_save(const char *fname)
             verb_map = NULL;
             verb_write(fd, verb);
         }
+
+        /* and now user data... */
+        if(world[i].data.hook_serialize)
+            world[i].data.hook_serialize(i, fd);
     }
+
+    write_uint64(fd, obj_get_idcounter());
+
     close(fd);
 }
 
@@ -147,7 +156,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
         return false;
 
     if(read_uint32(fd) != WORLD_MAGIC)
-        return false;
+        error("unknown world file format");
 
     if(world)
         world_free();
@@ -167,7 +176,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
         return false;
     }
 
-    obj_set_idcounter(read_uint64(fd));
+    obj_set_idcounter(1);
 
     size_t n_global_verbs = read_size(fd);
     for(unsigned i = 0; i < n_global_verbs; ++i)
@@ -208,7 +217,13 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
                 error("duplicate verb '%s' in room '%s'", verb->name,
                       world[i].data.name);
         }
+
+        /* user data, if any */
+        if(world[i].data.hook_deserialize)
+            world[i].data.hook_deserialize(i, fd);
     }
+
+    obj_set_idcounter(read_uint64(fd));
 
     close(fd);
     return true;

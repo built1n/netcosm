@@ -24,6 +24,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ * @file
+ * @brief A simple, chained hash table
+ */
+
 struct hash_node {
     const void *key;
     const void *data;

@@ -60,6 +60,11 @@ struct obj_class_t {
 
 typedef uint64_t obj_id;
 
+struct obj_alias_t {
+    char *alias;
+    struct obj_alias_t *next;
+};
+
 /* world modules should not instantiate this directly, use obj_new() instead */
 /* also, members marked with 'protected' should not be modified by the world module */
 struct object_t {
@@ -72,7 +77,11 @@ struct object_t {
 
     struct obj_class_t *class;
 
+    size_t n_alias;
+    struct obj_alias_t *alias_list;
+
     bool list; /* whether to list in room view */
+    bool default_article; /* whether or not to use 'a' or 'an' when describing this */
 
     void *userdata;
 
@@ -106,3 +115,6 @@ void obj_set_idcounter(obj_id);
 
 /* compare two objects */
 int obj_compare(const void *a, const void *b);
+
+/* count the number of non-alias objects in the given multimap */
+size_t obj_count_noalias(const void *multimap);

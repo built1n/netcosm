@@ -19,6 +19,7 @@
 #include "globals.h"
 
 #include "hash.h"
+#include "multimap.h"
 #include "obj.h"
 
 /* map of class names -> object classes */
@@ -50,7 +51,7 @@ struct object_t *obj_new(const char *class_name)
             if(hash_insert(obj_class_map,
                            netcosm_obj_classes[i].class_name,
                            netcosm_obj_classes + i))
-                error("duplicate object class name");
+                error("duplicate object class name '%s'", netcosm_obj_classes[i].class_name);
         }
     }
 
@@ -66,6 +67,8 @@ struct object_t *obj_new(const char *class_name)
 
     obj->id = idcounter++;
     obj->refcount = 1;
+    obj->list = true;
+    obj->default_article = true;
 
     return obj;
 }
@@ -78,6 +81,15 @@ void obj_write(int fd, struct object_t *obj)
 
     write_string(fd, obj->name);
     write_bool(fd, obj->list);
+    write_bool(fd, obj->default_article);
+
+    struct obj_alias_t *iter = obj->alias_list;
+    while(iter)
+    {
+        write_string(fd, iter->alias);
+        iter = iter->next;
+    }
+    write_string(fd, "");
 
     if(obj->class->hook_serialize)
         obj->class->hook_serialize(fd, obj);
@@ -93,6 +105,27 @@ struct object_t *obj_read(int fd)
 
     obj->name = read_string(fd);
     obj->list = read_bool(fd);
+    obj->default_article = read_bool(fd);
+
+    /* aliases */
+    struct obj_alias_t *last = NULL;
+    while(1)
+    {
+        char *alias = read_string(fd);
+        if(alias[0] == '\0')
+        {
+            free(alias);
+            break;
+        }
+        struct obj_alias_t *new = calloc(1, sizeof(*new));
+        new->alias = alias;
+        if(last)
+            last->next = new;
+        else
+            obj->alias_list = new;
+        last = new;
+    }
+
     if(obj->class->hook_deserialize)
         obj->class->hook_deserialize(fd, obj);
 
@@ -104,13 +137,14 @@ struct object_t *obj_copy(struct object_t *obj)
     struct object_t *ret = obj_new(obj->class->class_name);
     ret->name = strdup(obj->name);
     ret->list = obj->list;
-    ret->userdata = obj->class->hook_dupdata(obj);
+    if(obj->class->hook_dupdata)
+        ret->userdata = obj->class->hook_dupdata(obj);
     return ret;
 }
 
 struct object_t *obj_dup(struct object_t *obj)
 {
-    debugf("Adding an object reference for #%lu.\n", obj->id);
+    debugf("Adding an object reference to #%lu.\n", obj->id);
     ++obj->refcount;
     return obj;
 }
@@ -128,6 +162,15 @@ void obj_free(void *ptr)
         if(obj->class->hook_destroy)
             obj->class->hook_destroy(obj);
 
+        struct obj_alias_t *iter = obj->alias_list;
+        while(iter)
+        {
+            struct obj_alias_t *next = iter->next;
+            free(iter->alias);
+            free(iter);
+            iter = next;
+        }
+
         free(obj->name);
         free(obj);
     }
@@ -143,4 +186,25 @@ int obj_compare(const void *a, const void *b)
 {
     const struct object_t *c = a, *d = b;
     return !(c->id == d->id);
+}
+
+size_t obj_count_noalias(const void *a)
+{
+    size_t ret = 0;
+    void *save;
+    while(1)
+    {
+        const struct multimap_list *iter = multimap_iterate(a, &save, NULL);
+        a = NULL;
+        if(!iter)
+            break;
+        while(iter)
+        {
+            struct object_t *obj = iter->val;
+            if(!strcmp(iter->key, obj->name))
+                ++ret;
+            iter = iter->next;
+        }
+    }
+    return ret;
 }

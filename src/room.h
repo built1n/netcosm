@@ -48,6 +48,9 @@ struct roomdata_t {
     void (* const hook_init)(room_id id);
     void (* const hook_enter)(room_id room, user_t *user);
     void (* const hook_leave)(room_id room, user_t *user);
+    void (* const hook_serialize)(room_id room, int fd);
+    void (* const hook_deserialize)(room_id room, int fd);
+    void (* const hook_destroy)(room_id room);
 };
 
 struct room_t {
@@ -60,6 +63,8 @@ struct room_t {
     void *objects; /* multimap of object name -> object */
     void *verbs;
     void *users; /* username -> child_data */
+
+    void *userdata;
 };
 
 /* room/world */
@@ -74,14 +79,18 @@ bool room_user_del(room_id id, struct child_data *child);
 const struct multimap_list *room_obj_iterate(room_id room, void **save, size_t *n_pairs);
 
 /* new should point to a new object allocated with obj_new(), with
- * 'name' properly set */
+ * 'name' properly set
+ * returns true if the name is room-unique
+ */
 bool room_obj_add(room_id room, struct object_t *obj);
+
+bool room_obj_add_alias(room_id room, struct object_t *obj, char *alias);
+
+bool room_obj_del(room_id room, const char *name);
+bool room_obj_del_alias(room_id room, struct object_t *obj, const char *alias);
 
 const struct multimap_list *room_obj_get(room_id room, const char *obj);
 const struct multimap_list *room_obj_get_size(room_id room, const char *name, size_t *n_objs);
-
-bool room_obj_del(room_id room, const char *name);
-bool room_obj_del_id(room_id room, const char *name, obj_id id);
 
 size_t room_obj_count(room_id room);
 
@@ -97,3 +106,5 @@ void room_free(struct room_t *room);
 
 /* semi-protected, should only be called from world_ */
 void room_init_maps(struct room_t *room);
+
+size_t room_obj_count_noalias(room_id id);

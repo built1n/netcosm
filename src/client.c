@@ -40,6 +40,8 @@ bool poll_requests(void);
 
 void out_raw(const void *buf, size_t len)
 {
+    if(!are_child)
+        error("out() called from master");
     if(!len)
         return;
 

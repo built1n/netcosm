@@ -53,7 +53,7 @@ size_t multimap_delete_all(void *map, const void *key);
 
 /* returns a linked list, NOT individual items of a linked list */
 /* set map to NULL after the initial call */
-const struct multimap_list *multimap_iterate(void *map, void **save, size_t *n_pairs);
+const struct multimap_list *multimap_iterate(const void *map, void **save, size_t *n_pairs);
 
 size_t multimap_size(void *map);
 

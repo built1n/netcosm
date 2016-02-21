@@ -66,6 +66,8 @@ bool userdb_write(const char*);
 /* *save should be set to NULL on the first run */
 struct userdata_t *userdb_iterate(void **save);
 
+bool userdb_add_obj(const char *name, struct object_t *obj);
+
 /*** child-only functions ***/
 struct userdata_t *userdb_request_lookup(const char *name);
 bool userdb_request_add(struct userdata_t *data);

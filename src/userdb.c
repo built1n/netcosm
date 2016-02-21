@@ -57,7 +57,8 @@ void userdb_init(const char *file)
     if(fd >= 0)
     {
         if(read_uint32(fd) != USERDB_MAGIC)
-            error("bad userdb magic value");
+            error("unknown user file format");
+
         size_t n_users = read_size(fd);
         for(size_t u = 0; u < n_users; ++u)
         {
@@ -88,6 +89,13 @@ void userdb_init(const char *file)
             {
                 struct object_t *obj = obj_read(fd);
                 multimap_insert(data->objects, obj->name, obj);
+
+                struct obj_alias_t *iter = obj->alias_list;
+                while(iter)
+                {
+                    multimap_insert(data->objects, iter->alias, obj_dup(obj));
+                    iter = iter->next;
+                }
             }
 
             hash_insert(map, data->username, data);
@@ -105,6 +113,7 @@ bool userdb_write(const char *file)
     if(fd < 0)
         return false;
     write_uint32(fd, USERDB_MAGIC);
+
     write_size(fd, hash_size(map));
     void *save, *ptr = map;
     while(1)
@@ -118,7 +127,7 @@ bool userdb_write(const char *file)
 
         size_t n_objects;
         if(user->objects)
-            n_objects = multimap_size(user->objects);
+            n_objects = obj_count_noalias(user->objects);
         else
             n_objects = 0;
 
@@ -139,8 +148,12 @@ bool userdb_write(const char *file)
 
                 while(iter)
                 {
-                    debugf("Writing an object to disk...\n");
-                    obj_write(fd, iter->val);
+                    struct object_t *obj = iter->val;
+                    if(!strcmp(iter->key, obj->name))
+                    {
+                        debugf("Writing an object to disk...\n");
+                        obj_write(fd, iter->val);
+                    }
                     iter = iter->next;
                 }
             }
@@ -252,6 +265,22 @@ struct userdata_t *userdb_iterate(void **save)
         return hash_iterate(NULL, save, NULL);
     else
         return hash_iterate(map, save, NULL);
+}
+
+bool userdb_add_obj(const char *name, struct object_t *obj)
+{
+    struct userdata_t *user = userdb_lookup(name);
+
+    /* add aliases */
+    struct obj_alias_t *alias = obj->alias_list;
+    while(alias)
+    {
+        debugf("userdb adding object alias %s\n", alias->alias);
+        multimap_insert(user->objects, alias->alias, obj_dup(obj));
+        alias = alias->next;
+    }
+
+    return multimap_insert(user->objects, obj->name, obj_dup(obj));
 }
 
 /*** child request wrappers ***/

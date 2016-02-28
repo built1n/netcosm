@@ -66,7 +66,7 @@
 #define WORLD_MAGIC  0x31415926
 #define USERDB_MAGIC 0x27182818
 #define MAX_FAILURES 3
-#define NETCOSM_VERSION "0.5.0-rc1"
+#define NETCOSM_VERSION "0.5.0"
 
 /* username length */
 #define MAX_NAME_LEN 32

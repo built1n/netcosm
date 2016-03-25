@@ -80,6 +80,8 @@ void world_save(const char *fname)
         size_t n_objects = room_obj_count_noalias(i);
         write(fd, &n_objects, sizeof(n_objects));
 
+        debugf("Room %d has %d objects.\n", i, n_objects);
+
         room_id id = i;
         void *save;
         while(1)
@@ -95,7 +97,10 @@ void world_save(const char *fname)
                     break;
                 const char *name = iter->key;
                 if(!strcmp(name, obj->name))
-                   obj_write(fd, obj);
+                {
+                    debugf("writing object '%s' in room %d\n", obj->name, i);
+                    obj_write(fd, obj);
+                }
                 iter = iter->next;
             }
         }

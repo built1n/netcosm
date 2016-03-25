@@ -193,11 +193,12 @@ size_t multimap_delete(void *ptr, const void *key, const void *val)
         struct multimap_node *node = hash_lookup(map->hash_tab, key);
 
         if(!node)
-            return false;
+            return 0;
+
         /* iterate over the node's pairs and delete */
         size_t deleted = 0;
 
-        struct multimap_list *last = NULL, *iter = node->list, *next;;
+        struct multimap_list *last = NULL, *iter = node->list, *next;
         while(iter)
         {
             next = iter->next;
@@ -209,9 +210,10 @@ size_t multimap_delete(void *ptr, const void *key, const void *val)
                     map->free_key((void*)iter->key);
 
                 if(last)
-                    last->next = iter->next;
+                    last->next = next;
                 else
-                    node->list = iter->next;
+                    node->list = next;
+
                 free(iter);
 
                 ++deleted;
@@ -251,7 +253,9 @@ size_t multimap_delete_all(void *ptr, const void *key)
 
             return ret;
         }
-        /* fall through */
+
+        /* fall through on failure */
+
     }
     return 0;
 }

@@ -27,9 +27,9 @@
  * internally.
  */
 
-struct object_t;
+typedef struct child_data user_t;
 
-typedef struct child_data user_t; // see server.h for the definition
+struct object_t;
 
 struct obj_class_t {
     const char *class_name;
@@ -46,11 +46,6 @@ struct obj_class_t {
      * no function (NULL) = can take */
     bool (*hook_take)(struct object_t*, user_t *user);
 
-    /* called when dropping an object;
-     * true: can drop
-     * false: can't drop
-     * NULL: can drop
-     */
     bool (*hook_drop)(struct object_t*, user_t *user);
     void (*hook_destroy)(struct object_t*); // free resources
     const char* (*hook_desc)(struct object_t*, user_t*); // get object description
@@ -65,8 +60,9 @@ struct obj_alias_t {
     struct obj_alias_t *next;
 };
 
-/* world modules should not instantiate this directly, use obj_new() instead */
-/* also, members marked with 'protected' should not be modified by the world module */
+/* world modules should not instantiate this directly, use obj_new()
+ * instead also, fields marked with 'protected' should not be modified
+ * by the world module */
 struct object_t {
     obj_id id; // protected
 
@@ -75,17 +71,17 @@ struct object_t {
      * room */
     char *name;
 
-    struct obj_class_t *class;
+    struct obj_class_t *class; // protected
 
     size_t n_alias;
-    struct obj_alias_t *alias_list;
+    struct obj_alias_t *alias_list; // protected
 
-    bool list; /* whether to list in room view */
+    bool hidden; /* whether to list in room description */
     bool default_article; /* whether or not to use 'a' or 'an' when describing this */
 
     void *userdata;
 
-    unsigned refcount; // private
+    unsigned refcount; // protected
 };
 
 /* returns a new object of class 'c' */
@@ -100,10 +96,12 @@ struct object_t *obj_read(int fd);
 /* this adds a reference to an object, DOES NOT COPY */
 struct object_t *obj_dup(struct object_t *obj);
 
-/* makes a new object with a new ID, but same data fields as the original */
+/* makes a new object with a new ID, but with the same data fields as
+ * the original */
 struct object_t *obj_copy(struct object_t *obj);
 
-/* this only frees the object if its reference count is zero */
+/* decrements an object's reference count; frees the object if there
+ * are no more references to it */
 void obj_free(void*);
 
 /* shut down the obj_* module */

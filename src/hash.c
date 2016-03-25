@@ -308,12 +308,16 @@ bool hash_remove(void *ptr, const void *key)
                     last->next = iter->next;
                 else
                     map->table[hash] = iter->next;
+
                 if(map->free_key)
                     map->free_key((void*)iter->key);
                 if(map->free_data)
                     map->free_data((void*)iter->data);
+
                 --map->n_entries;
+
                 free(iter);
+
                 return true;
             }
             last = iter;

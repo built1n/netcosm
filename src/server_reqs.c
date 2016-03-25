@@ -157,42 +157,53 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
     room_id id = sender->room;
     while(1)
     {
-        debugf("Iterating over object name...\n");
         size_t n_objs;
-        const struct multimap_list *iter= room_obj_iterate(id, &save, &n_objs);
+        const struct multimap_list *iter = room_obj_iterate(id, &save, &n_objs);
         id = ROOM_NONE;
         if(!iter)
             break;
 
         const char *name = iter->key;
         struct object_t *obj = iter->val;
-        if(!strcmp(name, obj->name))
-        {
-            if(n_objs == 1)
-            {
-                char *article = (is_vowel(name[0])?"an":"a");
-                strlcat(buf, "There is ", sizeof(buf));
-                if(obj->default_article)
-                {
-                    strlcat(buf, article, sizeof(buf));
-                    strlcat(buf, " ", sizeof(buf));
-                }
-                strlcat(buf, name, sizeof(buf));
-                strlcat(buf, " here.\n", sizeof(buf));
-            }
-            else
-            {
-                strlcat(buf, "There are ", sizeof(buf));
-                char n[32];
-                snprintf(n, sizeof(n), "%lu ", n_objs);
-                strlcat(buf, n, sizeof(buf));
-                strlcat(buf, name, sizeof(buf));
-                strlcat(buf, "s here.\n", sizeof(buf));
-            }
-        }
-    }
 
-    send_packet(sender, REQ_BCASTMSG, buf, strlen(buf));
+        debugf("*** ITERATING OVER OBJECT IN ROOM ***\n");
+        debugf("hidden: %d\n", obj->hidden);
+        debugf("compare: %s %s\n", obj->name, name);
+
+        buf[0] = '\0';
+
+        if(!obj->hidden)
+        {
+            if(!strcmp(name, obj->name))
+            {
+                if(n_objs == 1)
+                {
+                    char *article = (is_vowel(name[0])?"an":"a");
+                    strlcat(buf, "There is ", sizeof(buf));
+                    if(obj->default_article)
+                    {
+                        strlcat(buf, article, sizeof(buf));
+                        strlcat(buf, " ", sizeof(buf));
+                    }
+                    strlcat(buf, name, sizeof(buf));
+                    strlcat(buf, " here.\n", sizeof(buf));
+                }
+                else
+                {
+                    strlcat(buf, "There are ", sizeof(buf));
+                    char n[32];
+                    snprintf(n, sizeof(n), "%lu ", n_objs);
+                    strlcat(buf, n, sizeof(buf));
+                    strlcat(buf, name, sizeof(buf));
+                    strlcat(buf, "s here.\n", sizeof(buf));
+                }
+            }
+
+            send_msg(sender, "%s", buf);
+        }
+        else
+            debugf("OBJECT IS HIDDEN\n");
+    }
 }
 
 static void req_send_roomname(unsigned char *data, size_t datalen, struct child_data *sender)
@@ -333,7 +344,7 @@ static void req_look_at(unsigned char *data, size_t datalen, struct child_data *
     if(inv_list)
     {
         send_msg(sender, "In inventory:\n");
-        idx = print_objlist(sender, inv_list, idx, n_objs);
+        print_objlist(sender, inv_list, idx, n_objs);
     }
 
     if(!room_list && !inv_list)
@@ -355,10 +366,12 @@ static void req_take(unsigned char *data, size_t datalen, struct child_data *sen
                 if(obj->class->hook_take && !obj->class->hook_take(obj, sender))
                 {
                     send_msg(sender, "You can't take that.\n");
-                    return;
+                    iter = next;
+                    continue;
                 }
 
                 userdb_add_obj(sender->user, obj);
+                room_obj_del_by_ptr(sender->room, obj);
 
                 send_msg(sender, "Taken.\n");
             }
@@ -366,8 +379,6 @@ static void req_take(unsigned char *data, size_t datalen, struct child_data *sen
                 break;
             iter = next;
         }
-
-        room_obj_del(sender->room, (const char*)data);
 
         server_save_state(false);
     }
@@ -452,16 +463,20 @@ static void req_drop(unsigned char *data, size_t datalen, struct child_data *sen
 
     while(iter)
     {
+        const struct multimap_list *next = iter->next;
         struct object_t *obj = iter->val;
 
-        struct object_t *dup = obj_dup(obj);
-        room_obj_add(sender->room, dup);
+        if(!obj->class->hook_drop || (obj->class->hook_drop && obj->class->hook_drop(obj, sender)))
+        {
+            send_msg(sender, "Dropped.\n");
+            room_obj_add(sender->room, obj_dup(obj));
+            userdb_del_obj_by_ptr(sender->user, obj);
+        }
+        else
+            send_msg(sender, "You cannot drop that.\n");
 
-        send_msg(sender, "Dropped.\n");
-        iter = iter->next;
+        iter = next;
     }
-
-    multimap_delete_all(user->objects, (const char*)data);
 
     server_save_state(false);
 }

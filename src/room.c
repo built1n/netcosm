@@ -80,9 +80,15 @@ void room_free(struct room_t *room)
 
 bool room_obj_add(room_id room, struct object_t *obj)
 {
+    debugf("ADDING OBJECT %s to ROOM %d\n", obj->name, room);
+
     bool status = true;
     if(!multimap_insert(room_get(room)->objects, obj->name, obj))
+    {
+        debugf("FAILED TO ADD OBJECT.\n");
         status = false;
+    }
+
     struct obj_alias_t *iter = obj->alias_list;
     while(iter)
     {
@@ -94,6 +100,9 @@ bool room_obj_add(room_id room, struct object_t *obj)
         }
         iter = iter->next;
     }
+
+    debugf("ROOM %d now has %d objects\n", room, multimap_size(room_get(room)->objects));
+
     return status;
 }
 
@@ -116,16 +125,22 @@ bool room_obj_add_alias(room_id room, struct object_t *obj, char *alias)
         iter = iter->next;
     }
 
+    debugf("adding alias '%s' for object '%s'\n", alias, obj->name);
+
+    debugf("ROOM %d now has %d total object names\n", room, multimap_size(room_get(room)->objects));
+
     struct obj_alias_t *new = calloc(1, sizeof(struct obj_alias_t));
 
-    new->alias = alias;
+    new->alias = strdup(alias);
 
     new->next = obj->alias_list;
     obj->alias_list = new;
 
     ++obj->n_alias;
 
-    return multimap_insert(room_get(room)->objects, alias, obj_dup(obj));
+    bool status = multimap_insert(room_get(room)->objects, alias, obj_dup(obj));
+
+    return status;
 }
 
 const struct multimap_list *room_obj_iterate(room_id room, void **save, size_t *n_pairs)
@@ -160,6 +175,7 @@ size_t room_obj_count_noalias(room_id id)
 
 bool room_obj_del_by_ptr(room_id room, struct object_t *obj)
 {
+    debugf("room_obj_del_by_ptr: deleting object %s\n", obj->name);
     struct obj_alias_t *iter = obj->alias_list;
 
     struct object_t tmp;
@@ -167,14 +183,17 @@ bool room_obj_del_by_ptr(room_id room, struct object_t *obj)
 
     while(iter)
     {
+        debugf(" deleting alias %s\n", iter->alias);
         multimap_delete(room_get(room)->objects, iter->alias, &tmp);
         iter = iter->next;
     }
 
+    debugf("After deleting aliases of object: %s:\n", obj->name);
+
     return multimap_delete(room_get(room)->objects, obj->name, &tmp);
 }
 
-/* delete all the objects with a matching name, and all their aliases,
+/* delete all the objects with a matching name, and all their aliases
  * from a room */
 
 bool room_obj_del(room_id room, const char *name)

@@ -30,6 +30,9 @@
  * callbacks.
  */
 
+struct child_data;
+typedef struct child_data user_t;
+
 struct verb_t;
 struct verb_class_t {
     const char *class_name;

@@ -28,9 +28,9 @@
    are added by hooks in rooms, which are provided by the world
    module. */
 
-typedef enum room_id { ROOM_NONE = -1 } room_id;
+typedef struct child_data user_t; // definition of child_data in server.h
 
-typedef struct child_data user_t;
+typedef enum room_id { ROOM_NONE = -1 } room_id;
 
 enum direction_t { DIR_N = 0, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_UP, DIR_DN, DIR_IN, DIR_OT, NUM_DIRECTIONS };
 
@@ -46,8 +46,12 @@ struct roomdata_t {
     const char * const adjacent[NUM_DIRECTIONS];
 
     void (* const hook_init)(room_id id);
-    void (* const hook_enter)(room_id room, user_t *user);
-    void (* const hook_leave)(room_id room, user_t *user);
+
+    /* return values indicate permission to enter/leave,
+     * setting to NULL defaults to true.
+     */
+    bool (* const hook_enter)(room_id room, user_t *user);
+    bool (* const hook_leave)(room_id room, user_t *user);
     void (* const hook_serialize)(room_id room, int fd);
     void (* const hook_deserialize)(room_id room, int fd);
     void (* const hook_destroy)(room_id room);
@@ -88,6 +92,7 @@ bool room_obj_add_alias(room_id room, struct object_t *obj, char *alias);
 
 bool room_obj_del(room_id room, const char *name);
 bool room_obj_del_alias(room_id room, struct object_t *obj, const char *alias);
+bool room_obj_del_by_ptr(room_id room, struct object_t *obj);
 
 const struct multimap_list *room_obj_get(room_id room, const char *obj);
 const struct multimap_list *room_obj_get_size(room_id room, const char *name, size_t *n_objs);

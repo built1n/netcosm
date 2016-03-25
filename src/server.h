@@ -26,20 +26,28 @@
 #include "server_reqs.h"
 #include "room.h"
 
+/* everything the server needs to manage its children */
 struct child_data {
-    pid_t pid;
-    int readpipe[2];
-    int outpipe[2];
+    pid_t    pid;
 
-    int state;
-    room_id room;
-    char *user;
+    /* pipes, packet mode */
+    int      readpipe[2];
+    int      outpipe[2];
 
-    ev_io *io_watcher;
+    /* user state */
+    int      state;
+    room_id  room;
+    char     *user;
+
+    /* libev watchers */
+    ev_io    *io_watcher;
     ev_child *sigchld_watcher;
 
+    /* remote IP */
     struct in_addr addr;
 };
+
+typedef struct child_data user_t;
 
 extern volatile int num_clients;
 extern void *child_map;

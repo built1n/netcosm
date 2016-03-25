@@ -183,7 +183,6 @@ bool userdb_remove(const char *key)
 
 bool userdb_add(struct userdata_t *data)
 {
-    userdb_dump();
     struct userdata_t *new = calloc(1, sizeof(*new)); /* only in C! */
     memcpy(new, data, sizeof(*new));
 
@@ -239,9 +238,6 @@ void userdb_dump(void)
 
 void userdb_shutdown(void)
 {
-    if(map && db_file && !are_child)
-        userdb_write(db_file);
-
     if(map)
     {
         hash_free(map);
@@ -281,6 +277,39 @@ bool userdb_add_obj(const char *name, struct object_t *obj)
     }
 
     return multimap_insert(user->objects, obj->name, obj_dup(obj));
+}
+
+bool userdb_del_obj_by_ptr(const char *username, struct object_t *obj)
+{
+    struct userdata_t *user = userdb_lookup(username);
+
+    struct obj_alias_t *iter = obj->alias_list;
+
+    struct object_t tmp;
+    tmp.id = obj->id;
+
+    while(iter)
+    {
+        multimap_delete(user->objects, iter->alias, &tmp);
+        iter = iter->next;
+    }
+
+    return multimap_delete(user->objects, obj->name, &tmp);
+}
+
+bool userdb_del_obj(const char *username, const char *obj_name)
+{
+    struct userdata_t *user = userdb_lookup(username);
+    const struct multimap_list *iter = multimap_lookup(user->objects, obj_name, NULL);
+    while(iter)
+    {
+        const struct multimap_list *next = iter->next;
+        struct object_t *obj = iter->val;
+        userdb_del_obj_by_ptr(username, obj);
+        iter = next;
+    }
+
+    return true;
 }
 
 /*** child request wrappers ***/

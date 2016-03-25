@@ -67,7 +67,7 @@ struct object_t *obj_new(const char *class_name)
 
     obj->id = idcounter++;
     obj->refcount = 1;
-    obj->list = true;
+    obj->hidden = false;
     obj->default_article = true;
 
     return obj;
@@ -80,7 +80,7 @@ void obj_write(int fd, struct object_t *obj)
     write_uint64(fd, obj->id);
 
     write_string(fd, obj->name);
-    write_bool(fd, obj->list);
+    write_bool(fd, obj->hidden);
     write_bool(fd, obj->default_article);
 
     struct obj_alias_t *iter = obj->alias_list;
@@ -104,7 +104,7 @@ struct object_t *obj_read(int fd)
     obj->id = read_uint64(fd);
 
     obj->name = read_string(fd);
-    obj->list = read_bool(fd);
+    obj->hidden = read_bool(fd);
     obj->default_article = read_bool(fd);
 
     /* aliases */
@@ -136,7 +136,7 @@ struct object_t *obj_copy(struct object_t *obj)
 {
     struct object_t *ret = obj_new(obj->class->class_name);
     ret->name = strdup(obj->name);
-    ret->list = obj->list;
+    ret->hidden = obj->hidden;
     if(obj->class->hook_dupdata)
         ret->userdata = obj->class->hook_dupdata(obj);
     return ret;

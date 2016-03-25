@@ -16,6 +16,12 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
+#include "globals.h"
+
+typedef struct child_data user_t;
+
 /* child<->master commands */
 /* children might not implement all of these */
 /* meanings might be different for the server and child, see comments */

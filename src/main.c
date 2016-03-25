@@ -5,4 +5,6 @@
 int main(int argc, char *argv[])
 {
     server_main(argc, argv);
+
+    error("weird");
 }

@@ -45,12 +45,15 @@ static int server_socket;
 /* saves state periodically */
 void server_save_state(bool force)
 {
-    static int n = 0;
-    n = (n + 1) % SAVE_INTERVAL;
-    if(!n || force)
+    if(!are_child)
     {
-        world_save(WORLDFILE);
-        userdb_write(USERFILE);
+        static int n = 0;
+        n = (n + 1) % SAVE_INTERVAL;
+        if(!n || force)
+        {
+            world_save(WORLDFILE);
+            userdb_write(USERFILE);
+        }
     }
 }
 
@@ -119,6 +122,10 @@ static void __attribute__((noreturn)) server_cleanup(void)
 
     close(server_socket);
 
+    /* save state */
+    if(!are_child)
+        server_save_state(true);
+
     /* shut down modules */
     client_shutdown();
     obj_shutdown();
@@ -152,7 +159,7 @@ static void __attribute__((noreturn)) sigint_handler(int s)
 }
 
 static bool autoconfig = false;
-const char *autouser, *autopass;
+static const char *autouser, *autopass;
 
 static void check_userfile(void)
 {

@@ -7,10 +7,12 @@ static void deadend_init(room_id id)
     struct object_t *new = obj_new("/generic");
     new->name = strdup("shovel");
     new->userdata = strdup("It is a normal shovel with a price tag attached that says $19.99.");
-    new->list = true;
     room_obj_add(id, new);
+
+#if 0
     new = obj_copy(new);
     room_obj_add(id, new);
+#endif
 }
 
 static void ew_road_init(room_id id)
@@ -18,8 +20,9 @@ static void ew_road_init(room_id id)
     struct object_t *new = obj_new("/generic/notake");
     new->name = strdup("large boulder");
     new->userdata = strdup("It is just a boulder.  It cannot be moved.");
-    new->list = true;
     room_obj_add(id, new);
+    room_obj_add_alias(id, new, "boulder");
+    room_obj_add_alias(id, new, "rock");
 }
 
 static void fork_init(room_id id)
@@ -54,12 +57,31 @@ static void fork_destroy(room_id id)
 
 static void senw_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic");
+    struct object_t *new = obj_new("/generic/dunnet/food");
     new->name = strdup("some food");
     new->userdata = strdup("It looks like some kind of meat.  Smells pretty bad.");
     new->default_article = false;
     room_obj_add(id, new);
-    room_obj_add_alias(id, new, strdup("food"));
+    room_obj_add_alias(id, new, "food");
+    room_obj_add_alias(id, new, "meat");
+}
+
+static void hangout_init(room_id id)
+{
+    struct object_t *new = obj_new("/generic/notake");
+    new->name = strdup("ferocious bear");
+    new->userdata = strdup("It looks like a grizzly to me.");
+    room_obj_add(id, new);
+    room_obj_add_alias(id, new, "bear");
+}
+
+static void hidden_init(room_id id)
+{
+    struct object_t *new = obj_new("/generic");
+    new->name = strdup("emerald bracelet");
+    new->userdata = strdup("I see nothing special about that.");
+    room_obj_add(id, new);
+    room_obj_add_alias(id, new, "bracelet");
 }
 
 const struct roomdata_t netcosm_world[] = {
@@ -106,8 +128,34 @@ const struct roomdata_t netcosm_world[] = {
         "senw_road",
         "SE/NW road",
         "You are on a southeast/northwest road.",
-        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, NONE_W, "fork", NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        { NONE_N, NONE_NE, NONE_E, "bear_hangout", NONE_S, NONE_SW, NONE_W, "fork", NONE_UP, NONE_DN, NONE_IN, NONE_OT },
         senw_init,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "bear_hangout",
+        "Bear Hangout",
+        "You are standing at the end of a road. A passage leads back to the northwest.",
+        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, "hidden_area", NONE_W, "senw_road", NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        hangout_init,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "hidden_area",
+        "Hidden Area",
+        "You are in a well-hidden area off to the side of a road.  Back to the northeast through the brush you can see the bear hangout.",
+        { NONE_N, "bear_hangout", NONE_E, NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        hidden_init,
         NULL,
         NULL,
         NULL,
@@ -119,7 +167,20 @@ const struct roomdata_t netcosm_world[] = {
         "nesw_road",
         "NE/SW road",
         "You are on a northeast/southwest road.",
-        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, "fork", NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        { NONE_N, "building_front", NONE_E, NONE_SE, NONE_S, "fork", NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "building_front",
+        "Building Front",
+        "You are at the end of the road.  There is a building in front of you to the northeast, and the road leads back to the southwest.",
+        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, "nesw_road", NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
         NULL,
         NULL,
         NULL,
@@ -166,8 +227,32 @@ static bool no_take(struct object_t *obj, user_t *user)
     return false;
 }
 
+static bool food_drop(struct object_t *obj, user_t *user)
+{
+    if(room_obj_get(user->room, "bear"))
+    {
+        send_msg(user, "The bear takes the food and runs away with it. He left something behind.\n");
+
+        struct object_t *new = obj_new("/generic");
+
+        debugf("ADDING OBJECT.\n");
+
+        new->name = strdup("shiny brass key");
+        new->userdata = strdup("I see nothing special about that.");
+
+        room_obj_add(user->room, new);
+        room_obj_add_alias(user->room, new, "key");
+        room_obj_add_alias(user->room, new, "shiny key");
+        room_obj_add_alias(user->room, new, "brass key");
+
+        room_obj_del(user->room, "ferocious bear");
+    }
+
+    return true;
+}
+
 const struct obj_class_t netcosm_obj_classes[] = {
-    /* a generic, takable object class with userdata as its description */
+    /* a generic, takeable object class with userdata pointing to its description */
     {
         "/generic",
         generic_ser,
@@ -179,7 +264,7 @@ const struct obj_class_t netcosm_obj_classes[] = {
         generic_dup,
     },
 
-    /* a generic, non-takable object class */
+    /* a generic, non-takeable object class, inherits /generic */
     {
         "/generic/notake",
         generic_ser,
@@ -189,7 +274,19 @@ const struct obj_class_t netcosm_obj_classes[] = {
         generic_destroy,
         generic_desc,
         generic_dup,
-    }
+    },
+
+    /* a specialized "food" object for dunnet, inherits /generic */
+    {
+        "/generic/dunnet/food",
+        generic_ser,
+        generic_deser,
+        NULL,
+        food_drop,
+        generic_destroy,
+        generic_desc,
+        generic_dup,
+    },
 };
 
 const size_t netcosm_obj_classes_sz = ARRAYLEN(netcosm_obj_classes);
@@ -215,8 +312,10 @@ static void dig_exec(struct verb_t *verb, char *args, user_t *user)
             struct object_t *new = obj_new("/generic");
             new->name = strdup("CPU card");
             new->userdata = strdup("The CPU board has a VAX chip on it.  It seems to have 2 Megabytes of RAM onboard.");
-            new->list = true;
             room_obj_add(user->room, new);
+            room_obj_add_alias(user->room, new, "cpu");
+            room_obj_add_alias(user->room, new, "chip");
+            room_obj_add_alias(user->room, new, "card");
             send_msg(user, "I think you found something.\n");
         }
         else

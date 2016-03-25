@@ -88,6 +88,7 @@
 #include "util.h"
 
 #define MSG_MAX PIPE_BUF
+
 #ifndef NDEBUG
 #define debugf(fmt,...) debugf_real(__func__, __LINE__, __FILE__, fmt, ##__VA_ARGS__)
 #else

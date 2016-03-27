@@ -102,3 +102,12 @@ void *hash_dup(void*);
 
 /* sets the callback for when duplicating a data node */
 void hash_setdupdata_cb(void*, void *(*cb)(void*));
+
+struct hash_export_node {
+    unsigned hash;
+    void *last, *node, *next;
+};
+
+struct hash_export_node hash_get_internal_node(void *ptr, const void *key);
+
+void hash_del_internal_node(void *ptr, const struct hash_export_node *node);

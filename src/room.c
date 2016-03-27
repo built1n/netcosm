@@ -175,7 +175,6 @@ size_t room_obj_count_noalias(room_id id)
 
 bool room_obj_del_by_ptr(room_id room, struct object_t *obj)
 {
-    debugf("room_obj_del_by_ptr: deleting object %s\n", obj->name);
     struct obj_alias_t *iter = obj->alias_list;
 
     struct object_t tmp;
@@ -183,12 +182,9 @@ bool room_obj_del_by_ptr(room_id room, struct object_t *obj)
 
     while(iter)
     {
-        debugf(" deleting alias %s\n", iter->alias);
         multimap_delete(room_get(room)->objects, iter->alias, &tmp);
         iter = iter->next;
     }
-
-    debugf("After deleting aliases of object: %s:\n", obj->name);
 
     return multimap_delete(room_get(room)->objects, obj->name, &tmp);
 }

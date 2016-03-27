@@ -466,14 +466,17 @@ static void req_drop(unsigned char *data, size_t datalen, struct child_data *sen
         const struct multimap_list *next = iter->next;
         struct object_t *obj = iter->val;
 
-        if(!obj->class->hook_drop || (obj->class->hook_drop && obj->class->hook_drop(obj, sender)))
+        room_obj_add(sender->room, obj_dup(obj));
+        userdb_del_obj_by_ptr(sender->user, obj);
+
+        if(obj->class->hook_drop && !obj->class->hook_drop(obj, sender))
         {
-            send_msg(sender, "Dropped.\n");
-            room_obj_add(sender->room, obj_dup(obj));
-            userdb_del_obj_by_ptr(sender->user, obj);
+            send_msg(sender, "You cannot drop that.\n");
+            userdb_add_obj(sender->user, obj_dup(obj));
+            room_obj_del_by_ptr(sender->room, obj);
         }
         else
-            send_msg(sender, "You cannot drop that.\n");
+            send_msg(sender, "Dropped.\n");
 
         iter = next;
     }

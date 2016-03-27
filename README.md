@@ -89,7 +89,7 @@ latency.
 
 Versions are numbered using the MAJOR.MINOR.BUGFIX scheme.
 
-The latest version is 0.5.0-rc1.
+The latest version is 0.5.0.
 
 Major versions mark major milestones (see below), minor versions mark
 incremental milestones and compatibility of data files, and bugfix

@@ -328,6 +328,56 @@ bool hash_remove(void *ptr, const void *key)
     return false;
 }
 
+/* return an opaque pointer to a particular key/value pair */
+struct hash_export_node hash_get_internal_node(void *ptr, const void *key)
+{
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        unsigned hash = map->hash(key) % map->table_sz;
+
+        struct hash_node *iter = map->table[hash], *last = NULL;;
+
+        while(iter)
+        {
+            if(map->compare(key, iter->key) == 0)
+            {
+                struct hash_export_node ret;
+                ret.hash = hash;
+                ret.last = last;
+                ret.node = iter;
+                ret.next = iter->next;
+                return ret;
+            }
+            last = iter;
+            iter = iter->next;
+        }
+        /* fall through */
+    }
+
+    struct hash_export_node ret;
+    ret.node = NULL;
+    return ret;
+}
+
+void hash_del_internal_node(void *ptr, const struct hash_export_node *node)
+{
+    if(ptr)
+    {
+        if(node->node)
+        {
+            struct hash_map *map = ptr;
+            CHECK_SENTINEL(map);
+
+            if(node->last)
+                ((struct hash_node*)node->last)->next = node->next;
+            else
+                map->table[node->hash] = node->next;
+        }
+    }
+}
+
 void *hash_getkeyptr(void *ptr, const void *key)
 {
     if(ptr)

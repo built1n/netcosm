@@ -192,6 +192,8 @@ size_t multimap_delete(void *ptr, const void *key, const void *val)
 
         struct multimap_node *node = hash_lookup(map->hash_tab, key);
 
+        struct hash_export_node internal_node = hash_get_internal_node(map->hash_tab, key);
+
         if(!node)
             return 0;
 
@@ -227,7 +229,7 @@ size_t multimap_delete(void *ptr, const void *key, const void *val)
 
         if(!node->n_pairs)
         {
-            hash_remove(map->hash_tab, key);
+            hash_del_internal_node(map->hash_tab, &internal_node);
         }
 
         return deleted;

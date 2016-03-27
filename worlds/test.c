@@ -239,8 +239,6 @@ static bool food_drop(struct object_t *obj, user_t *user)
         struct object_t *new = obj_new("/generic");
         new->hidden = false;
 
-        debugf("ADDING OBJECT.\n");
-
         new->name = strdup("shiny brass key");
         new->userdata = strdup("I see nothing special about that.");
 

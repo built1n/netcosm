@@ -80,12 +80,9 @@ void room_free(struct room_t *room)
 
 bool room_obj_add(room_id room, struct object_t *obj)
 {
-    debugf("ADDING OBJECT %s to ROOM %d\n", obj->name, room);
-
     bool status = true;
     if(!multimap_insert(room_get(room)->objects, obj->name, obj))
     {
-        debugf("FAILED TO ADD OBJECT.\n");
         status = false;
     }
 
@@ -95,13 +92,9 @@ bool room_obj_add(room_id room, struct object_t *obj)
         if(!multimap_insert(room_get(room)->objects, iter->alias, obj_dup(obj)))
         {
             status = false;
-
-            debugf("Status is false\n");
         }
         iter = iter->next;
     }
-
-    debugf("ROOM %d now has %d objects\n", room, multimap_size(room_get(room)->objects));
 
     return status;
 }
@@ -124,10 +117,6 @@ bool room_obj_add_alias(room_id room, struct object_t *obj, char *alias)
             return false;
         iter = iter->next;
     }
-
-    debugf("adding alias '%s' for object '%s'\n", alias, obj->name);
-
-    debugf("ROOM %d now has %d total object names\n", room, multimap_size(room_get(room)->objects));
 
     struct obj_alias_t *new = calloc(1, sizeof(struct obj_alias_t));
 

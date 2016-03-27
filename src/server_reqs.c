@@ -166,10 +166,6 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
         const char *name = iter->key;
         struct object_t *obj = iter->val;
 
-        debugf("*** ITERATING OVER OBJECT IN ROOM ***\n");
-        debugf("hidden: %d\n", obj->hidden);
-        debugf("compare: %s %s\n", obj->name, name);
-
         buf[0] = '\0';
 
         if(!obj->hidden)
@@ -201,8 +197,6 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
 
             send_msg(sender, "%s", buf);
         }
-        else
-            debugf("OBJECT IS HIDDEN\n");
     }
 }
 
@@ -241,7 +235,6 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
     room_user_del(sender->room, sender);
 
     /* TODO: checking */
-    debugf("Moving in direction %d\n", dir);
     room_id new = current->adjacent[dir];
     int status = 0;
     if(new != ROOM_NONE)
@@ -249,7 +242,6 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
         child_set_room(sender, new);
         status = 1;
     }
-    debugf("server status: %d\n", status);
 
     send_packet(sender, REQ_MOVE, &status, sizeof(status));
 }
@@ -265,8 +257,6 @@ static void req_send_user(unsigned char *data, size_t datalen, struct child_data
             send_packet(sender, REQ_GETUSERDATA, user, sizeof(*user));
             return;
         }
-
-        debugf("looking up user %s failed\n", data);
     }
 }
 
@@ -327,7 +317,6 @@ static int print_objlist(struct child_data *sender, const struct multimap_list *
 static void req_look_at(unsigned char *data, size_t datalen, struct child_data *sender)
 {
     (void) datalen;
-    debugf("Looking at '%s'\n", data);
     size_t n_objs = 0, tmp;
 
     const struct multimap_list *room_list = room_obj_get_size(sender->room, (const char*)data, &n_objs);
@@ -511,8 +500,6 @@ static void req_execverb(unsigned char *data, size_t datalen, struct child_data 
 
     all_lower(tok);
 
-    debugf("server: exec verb '%s'\n", tok);
-
     void *local_map = room_verb_map(sender->room);
     struct verb_t *verb = hash_lookup(local_map, tok);
     if(verb)
@@ -531,7 +518,6 @@ static void req_execverb(unsigned char *data, size_t datalen, struct child_data 
     char *args;
 exec_verb:
     args = strtok_r(NULL, "", &save);
-    debugf("args is %s\n", args);
     verb->class->hook_exec(verb, args, sender);
 }
 

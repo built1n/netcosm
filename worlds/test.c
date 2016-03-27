@@ -234,7 +234,7 @@ static bool food_drop(struct object_t *obj, user_t *user)
         send_msg(user, "The bear takes the food and runs away with it. He left something behind.\n");
 
         room_obj_del(user->room, "ferocious bear");
-        room_obj_del(user->room, "some food");
+        room_obj_del_by_ptr(user->room, obj);
 
         struct object_t *new = obj_new("/generic");
         new->hidden = false;

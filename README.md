@@ -100,7 +100,7 @@ number.
 
 #### 0.4.0 (skipped)
 
-* Object support [DONE, needs testing]
+* Object support [DONE]
 
 * User inventory support [DONE]
 
@@ -110,7 +110,15 @@ number.
 
 * Verb support [DONE]
 
-* World hooks/scripting [PARTIAL]
+* World hooks/scripting [DONE]
+
+##### 0.5.1
+
+* Work on dunnet clone
+
+* API enhancements
+
+* Many bugfixes
 
 #### 0.6.0
 

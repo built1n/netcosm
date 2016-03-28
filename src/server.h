@@ -19,12 +19,9 @@
 /* You should use #pragma once everywhere. */
 #pragma once
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include "globals.h"
 
-#include "server_reqs.h"
-#include "room.h"
+enum room_id;
 
 /* everything the server needs to manage its children */
 struct child_data {

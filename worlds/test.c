@@ -1,5 +1,7 @@
 #include <world_api.h>
 
+/* implements dunnet in NetCosm */
+
 /************ ROOM DEFINITIONS ************/
 
 static void deadend_init(room_id id)
@@ -7,12 +9,35 @@ static void deadend_init(room_id id)
     struct object_t *new = obj_new("/generic");
     new->name = strdup("shovel");
     new->userdata = strdup("It is a normal shovel with a price tag attached that says $19.99.");
+
     room_obj_add(id, new);
 
-#if 0
-    new = obj_copy(new);
+    new = obj_new("/generic/notake");
+    new->name = strdup("trees");
+    new->userdata = strdup("They are palm trees with a bountiful supply of coconuts in them.");
+    new->hidden = true;
+
     room_obj_add(id, new);
-#endif
+    room_obj_add_alias(id, new, "tree");
+    room_obj_add_alias(id, new, "palm");
+    room_obj_add_alias(id, new, "palm tree");
+
+    /* add global verbs */
+    struct verb_t *verb = verb_new("dig");
+    verb->name = strdup("dig");
+    world_verb_add(verb);
+
+    verb = verb_new("put");
+    verb->name = strdup("put");
+    world_verb_add(verb);
+
+    verb = verb_new("eat");
+    verb->name = strdup("eat");
+    world_verb_add(verb);
+
+    verb = verb_new("shake");
+    verb->name = strdup("shake");
+    world_verb_add(verb);
 }
 
 static void ew_road_init(room_id id)
@@ -27,30 +52,26 @@ static void ew_road_init(room_id id)
 
 static void fork_init(room_id id)
 {
-    struct verb_t *new = verb_new("dig");
-    new->name = strdup("dig");
-    room_verb_add(id, new);
-
     room_get(id)->userdata = calloc(1, sizeof(bool));
     /* flag for whether the user has already dug */
     bool *b = room_get(id)->userdata;
     *b = false;
 }
 
-static void fork_ser(room_id id, int fd)
+static void bool_ser(room_id id, int fd)
 {
     bool *b = room_get(id)->userdata;
     write_bool(fd, *b);
 }
 
-static void fork_deser(room_id id, int fd)
+static void bool_deser(room_id id, int fd)
 {
     bool *b = calloc(1, sizeof(bool));
     *b = read_bool(fd);
     room_get(id)->userdata = b;
 }
 
-static void fork_destroy(room_id id)
+static void bool_destroy(room_id id)
 {
     free(room_get(id)->userdata);
 }
@@ -82,6 +103,43 @@ static void hidden_init(room_id id)
     new->userdata = strdup("I see nothing special about that.");
     room_obj_add(id, new);
     room_obj_add_alias(id, new, "bracelet");
+}
+
+static bool building_enter(room_id id, user_t *user)
+{
+    (void) id;
+    if(multimap_lookup(userdb_lookup(user->user)->objects, "shiny brass key", NULL))
+        return true;
+    else
+    {
+        send_msg(user, "You don't have a key that can open this door.\n");
+        return false;
+    }
+}
+
+static void mailroom_init(room_id id)
+{
+    struct object_t *new = obj_new("/generic/notake");
+    new->name = strdup("bins");
+    new->hidden = true;
+
+    /* insert IAC NOP to prevent the extra whitespace from being dropped */
+    new->userdata = strdup("All of the bins are empty.  Looking closely you can see that there are names written at the bottom of each bin, but most of them are faded away so that you cannot read them.  You can only make out three names:\n\377\361                   Jeffrey Collier\n\377\361                   Robert Toukmond\n\377\361                   Thomas Stock\n");
+    room_obj_add(id, new);
+}
+
+static void computer_room_init(room_id id)
+{
+    struct object_t *new = obj_new("/generic/notake");
+    new->name = strdup("computer");
+    new->userdata = strdup("I see nothing special about that.");
+    new->hidden = true;
+
+    room_obj_add(id, new);
+    room_obj_add_alias(id, new, "vax");
+
+    /* flag for whether computer is active */
+    room_get(id)->userdata = malloc(sizeof(bool));
 }
 
 const struct roomdata_t netcosm_world[] = {
@@ -119,9 +177,9 @@ const struct roomdata_t netcosm_world[] = {
         fork_init,
         NULL,
         NULL,
-        fork_ser,
-        fork_deser,
-        fork_destroy,
+        bool_ser,
+        bool_deser,
+        bool_destroy,
     },
 
     {
@@ -180,13 +238,52 @@ const struct roomdata_t netcosm_world[] = {
         "building_front",
         "Building Front",
         "You are at the end of the road.  There is a building in front of you to the northeast, and the road leads back to the southwest.",
-        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, "nesw_road", NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        { NONE_N, "building_hallway", NONE_E, NONE_SE, NONE_S, "nesw_road", NONE_W, NONE_NW, NONE_UP, NONE_DN, "building_hallway", NONE_OT },
         NULL,
         NULL,
         NULL,
         NULL,
         NULL,
         NULL,
+    },
+
+    {
+        "building_hallway",
+        "Old Building hallway",
+        "You are in the hallway of an old building.  There are rooms to the east and west, and doors leading out to the north and south.",
+        { NONE_N, NONE_NE, "mailroom", NONE_SE, "building_front", NONE_SW, "computer_room", NONE_NW, NONE_UP, NONE_DN, NONE_IN, "building_front" },
+        NULL,
+        building_enter,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "mailroom",
+        "Mailroom",
+        "You are in a mailroom.  There are many bins where the mail is usually kept.  The exit is to the west.",
+        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, "building_hallway", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        mailroom_init,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "computer_room",
+        "Computer room",
+        "You are in a computer room.  It seems like most of the equipment has been removed.  There is a VAX 11/780 in front of you, however, with one of the cabinets wide open.  A sign on the front of the machine says: This VAX is named 'pokey'.  To type on the console, use the 'type' command.  The exit is to the east.\nThe panel lights are steady and motionless.",
+        { NONE_N, NONE_NE, "building_hallway", NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        computer_room_init,
+        NULL,
+        NULL,
+        bool_ser,
+        bool_deser,
+        bool_destroy,
     },
 };
 
@@ -323,6 +420,8 @@ static void dig_exec(struct verb_t *verb, char *args, user_t *user)
             goto nothing;
         }
     }
+    else
+        send_msg(user, "Digging here reveals nothing.\n");
 
     return;
 
@@ -330,19 +429,169 @@ nothing:
     send_msg(user, "Digging here reveals nothing.\n");
 }
 
+static void put_exec(struct verb_t *verb, char *args, user_t *user)
+{
+    (void) verb;
+    char *save;
+    const char *obj_name = strtok_r(args, WSPACE, &save);
+
+    if(!obj_name)
+    {
+        send_msg(user, "You must supply an object\n");
+        return;
+    }
+
+    args = NULL;
+    const struct multimap_list *list = multimap_lookup(userdb_lookup(user->user)->objects,
+                                                       obj_name, NULL);
+    if(!list)
+    {
+        send_msg(user, "You don't have that.\n");
+        return;
+    }
+
+    struct object_t *obj = list->val;
+
+    /* original dunnet ignores the preposition */
+    const char *prep = strtok_r(args, WSPACE, &save);
+    (void) prep;
+
+    const char *ind_obj_name = strtok_r(args, WSPACE, &save);
+
+    if(!ind_obj_name)
+    {
+        send_msg(user, "You must supply an indirect object.\n");
+        return;
+    }
+
+    list = room_obj_get(user->room, ind_obj_name);
+
+    if(!list)
+    {
+        send_msg(user, "I don't know what that indirect object is.\n");
+        return;
+    }
+
+    struct object_t *ind_obj = list->val;
+
+    /* now execute the verb */
+    if(!strcmp(obj->name, "CPU card") && !strcmp(ind_obj->name, "computer") && user->room == room_get_id("computer_room"))
+    {
+        userdb_del_obj_by_ptr(user->user, obj);
+        send_msg(user, "As you put the CPU board in the computer, it immediately springs to life.  The lights start flashing, and the fans seem to startup.\n");
+        bool *b = room_get(user->room)->userdata;
+        *b = true;
+
+        room_get(user->room)->data.desc = strdup("You are in a computer room.  It seems like most of the equipment has been removed.  There is a VAX 11/780 in front of you, however, with one of the cabinets wide open.  A sign on the front of the machine says: This VAX is named 'pokey'.  To type on the console, use the 'type' command.  The exit is to the east.\nThe panel lights are flashing in a seemingly organized pattern.");
+    }
+    else
+    {
+        send_msg(user, "I don't know how to combine those objects.  Perhaps you should just try dropping it.\n");
+    }
+}
+
+static void eat_exec(struct verb_t *verb, char *args, user_t *user)
+{
+    (void) verb;
+    char *save;
+    char *obj_name = strtok_r(args, WSPACE, &save);
+    if(!obj_name)
+    {
+        send_msg(user, "You must supply an object.\n");
+        return;
+    }
+
+    size_t n_objs;
+    const struct multimap_list *list = multimap_lookup(userdb_lookup(user->user)->objects, obj_name, &n_objs);
+
+    if(!list)
+    {
+        if(!room_obj_get(user->room, obj_name))
+            send_msg(user, "I don't know what that is.\n");
+        else
+            send_msg(user, "You don't have that.\n");
+        return;
+    }
+
+    struct object_t *obj = list->val;
+
+    if(!strcmp(obj->name, "some food"))
+    {
+        send_msg(user, "That tasted horrible.\n");
+    }
+    else
+    {
+        char buf[MSG_MAX];
+        send_msg(user, "You forcibly shove %s down your throat, and start choking.\n",
+                 format_noun(buf, sizeof(buf), obj->name, n_objs, obj->default_article, false));
+
+        /* TODO: kill player */
+    }
+
+    userdb_del_obj(user->user, obj_name);
+}
+
+static void shake_exec(struct verb_t *verb, char *args, user_t *user)
+{
+    (void) verb;
+    char *save;
+    char *obj_name = strtok_r(args, WSPACE, &save);
+
+    if(!obj_name)
+    {
+        send_msg(user, "You must supply an object.\n");
+        return;
+    }
+
+    size_t n_objs_room, n_objs_inv;
+    const struct multimap_list *list_room = room_obj_get_size(user->room, obj_name, &n_objs_room);
+
+    const struct multimap_list *list_inv = multimap_lookup(userdb_lookup(user->user)->objects, obj_name, &n_objs_inv);
+
+    if(!list_room && !list_inv)
+    {
+        send_msg(user, "I don't know what that is.\n");
+        return;
+    }
+
+    if(list_room)
+    {
+        struct object_t *obj = list_room->val;
+        if(!strcmp(obj->name, "trees"))
+            send_msg(user, "You begin to shake a tree, and notice a coconut begin to fall from the air.  As you try to get your hand up to block it, you feel the impact as it lands on your head.\n");
+        else
+            send_msg(user, "You don't have that.\n");
+    }
+    else if(list_inv)
+    {
+        struct object_t *obj = list_inv->val;
+        char buf[MSG_MAX];
+        send_msg(user, "Shaking %s seems to have no effect.\n",
+                 format_noun(buf, sizeof(buf), obj->name,
+                             n_objs_room, obj->default_article,
+                             false));
+    }
+}
+
+/* verb classes */
+
 const struct verb_class_t netcosm_verb_classes[] = {
     { "dig",
       dig_exec },
-    /*
-    { "shake",
-      shake_exec },
-    { "climb",
-      climb_exec },
     { "put",
       put_exec },
     { "eat",
       eat_exec },
-    { "feed",
+    { "shake",
+      shake_exec },
+    /*
+    { "type",
+      type_exec },
+    { "climb",
+      climb_exec },
+    */
+    /*
+      { "feed",
       feed_exec },
     */
 };

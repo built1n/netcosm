@@ -21,6 +21,7 @@
 #include "globals.h"
 
 #include "room.h"
+#include "server.h"
 
 /* the verb API is modeled after that of obj_*, this allows for
  * dynamic creation/deletion of verbs, but is also easily
@@ -29,9 +30,6 @@
  * so, all verbs are part of a verb class, which has all of its
  * callbacks.
  */
-
-struct child_data;
-typedef struct child_data user_t;
 
 struct verb_t;
 struct verb_class_t {

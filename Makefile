@@ -34,12 +34,12 @@ INCLUDES = -I src/ -I export/include/
 
 WARNFLAGS = -Wall -Wextra -Wshadow -fno-strict-aliasing
 
-OPTFLAGS = -Og
+OPTFLAGS = -O2
 DEBUGFLAGS = -g
 
 CFLAGS = $(OPTFLAGS) $(DEBUGFLAGS) $(WARNFLAGS) -std=c99 $(INCLUDES)
 
-LDFLAGS = -lev -lcrypto -lbsd
+LDFLAGS = -lev -lcrypto
 
 HEADERS = src/*.h export/include/*.h
 

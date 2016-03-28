@@ -24,6 +24,8 @@
 #include "server_reqs.h"
 #include "userdb.h"
 
+enum room_id;
+
 enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN } reqdata_type;
 
 union reqdata_t {

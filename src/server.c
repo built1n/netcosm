@@ -21,6 +21,7 @@
 #include "client.h"
 #include "hash.h"
 #include "server.h"
+#include "server_reqs.h"
 #include "userdb.h"
 #include "util.h"
 #include "world.h"
@@ -254,10 +255,34 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
     int readpipe[2]; /* child->parent */
     int outpipe [2]; /* parent->child */
 
+    /* try several methods to create a packet pipe between the child and master: */
+
+    /* first try creating a pipe in "packet mode": see pipe(2) */
     if(pipe2(readpipe, O_DIRECT) < 0)
-        error("error creating pipe, need linux kernel >= 3.4");
+    {
+        /* then try a SOCK_SEQPACKET socket pair: see unix(7) */
+        if(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, readpipe) < 0)
+        {
+            /* if that failed, try a SOCK_DGRAM socket as a last resort */
+            if(socketpair(AF_UNIX, SOCK_DGRAM, 0, readpipe) < 0)
+                error("couldn't create child-master communication pipe");
+            else
+                debugf("WARNING: Using a SOCK_DGRAM socket pair for IPC, performance may be degraded.\n");
+        }
+        else
+            debugf("Using a SOCK_SEQPACKET socket pair for IPC.\n");
+    }
+    else
+        debugf("Using a packet-mode pipe for IPC.\n");
+
     if(pipe2(outpipe, O_DIRECT) < 0)
-        error("error creating pipe, need linux kernel >= 3.4");
+    {
+        if(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, outpipe) < 0)
+        {
+            if(socketpair(AF_UNIX, SOCK_DGRAM, 0, outpipe) < 0)
+                error("error creating pipe, need linux kernel >= 3.4");
+        }
+    }
 
     pid_t pid = fork();
     if(pid < 0)
@@ -328,6 +353,7 @@ static void init_signals(void)
 {
     struct sigaction sa;
 
+    /* SIGINT and SIGTERM cause graceful shutdown */
     sigemptyset(&sa.sa_mask);
     sigaddset(&sa.sa_mask, SIGINT);
     sa.sa_handler = sigint_handler;
@@ -337,6 +363,7 @@ static void init_signals(void)
     if(sigaction(SIGTERM, &sa, NULL) < 0)
         error("sigaction");
 
+    /* ignore SIGPIPE */
     sigemptyset(&sa.sa_mask);
     sa.sa_handler = SIG_IGN;
     sa.sa_flags = 0;
@@ -344,7 +371,7 @@ static void init_signals(void)
         error("sigaction");
 
     /* libev's default SIGCHLD handler exhibits some really strange
-     * behavior, which we don't like, so we use our own ;) */
+     * behavior, which we don't like, so we use our own */
     sigemptyset(&sa.sa_mask);
     sigaddset(&sa.sa_mask, SIGCHLD);
     sa.sa_handler = sigchld_handler;
@@ -366,7 +393,7 @@ static void parse_args(int argc, char *argv[])
                 switch(c)
                 {
                 case 'h': /* help */
-                    debugf("FIXME: usage message");
+                    debugf("Usage: %s [-d PREFIX] [-a <username> <password>]\n", argv[0]);
                     exit(0);
                 case 'a': /* automatic first-run config */
                     autoconfig = true;
@@ -392,7 +419,7 @@ static SIMP_EQUAL(pid_t, pid_equal);
 
 static void check_libs(void)
 {
-    debugf("*** Starting NetCosm %s (libev %d.%d, %s) ***\n",
+    debugf("*** NetCosm %s (libev %d.%d, %s) ***\n",
            NETCOSM_VERSION, EV_VERSION_MAJOR, EV_VERSION_MINOR, OPENSSL_VERSION_TEXT);
     assert(ev_version_major() == EV_VERSION_MAJOR &&
            ev_version_minor() >= EV_VERSION_MINOR);
@@ -404,29 +431,32 @@ int server_main(int argc, char *argv[])
 
     parse_args(argc, argv);
 
-    server_socket = server_bind();
-
     userdb_init(USERFILE);
 
+    /* also performs first-time setup: */
     check_userfile();
+
     load_worldfile();
 
+    /* initialize request map */
     reqmap_init();
 
     /* save some time after a fork() */
     client_init();
 
-    /* this initial size very low to make iteration faster */
+    /* this initial size is set very low to make iteration faster */
     child_map = hash_init(16, pid_hash, pid_equal);
     hash_setfreedata_cb(child_map, free_child_data);
     hash_setfreekey_cb(child_map, free);
 
     debugf("Listening on port %d\n", port);
 
+    server_socket = server_bind();
+
     struct ev_loop *loop = ev_default_loop(0);
 
     /* we initialize signals after creating the default event loop
-     * because libev grabs SIGCHLD */
+     * because libev grabs SIGCHLD in the process */
     init_signals();
 
     ev_io server_watcher;

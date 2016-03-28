@@ -357,6 +357,7 @@ struct hash_export_node hash_get_internal_node(void *ptr, const void *key)
     }
 
     struct hash_export_node ret;
+    memset(&ret, 0, sizeof(ret));
     ret.node = NULL;
     return ret;
 }

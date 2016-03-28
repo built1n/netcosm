@@ -19,9 +19,12 @@
 #include "globals.h"
 
 #include "client.h"
+#include "client_reqs.h"
 #include "hash.h"
 #include "multimap.h"
+#include "obj.h"
 #include "server.h"
+#include "server_reqs.h"
 #include "userdb.h"
 
 static void *map = NULL;
@@ -229,7 +232,7 @@ void userdb_dump(void)
             while(iter)
             {
                 struct object_t *obj = iter->val;
-                debugf(" - Obj #%lu class %s: name %s\n", obj->id, obj->class->class_name, obj->name);
+                debugf(" - Obj #%"PRI_OBJID" class %s: name %s\n", obj->id, obj->class->class_name, obj->name);
                 iter = iter->next;
             }
         }

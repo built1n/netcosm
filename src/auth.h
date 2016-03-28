@@ -26,12 +26,6 @@
 //#define HASH_ITERS 500000
 #define HASH_ITERS 1
 
-struct authinfo_t {
-    bool success;
-    const char *user;
-    int authlevel;
-};
-
 /* makes admin account */
 void first_run_setup(void);
 

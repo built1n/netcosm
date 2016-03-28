@@ -19,6 +19,7 @@
 #include "globals.h"
 
 #include "client.h"
+#include "client_reqs.h"
 #include "hash.h"
 
 enum reqdata_typespec reqdata_type = TYPE_NONE;
@@ -81,9 +82,7 @@ bool poll_requests(void)
             int status = *((int*)data);
 
             reqdata_type = TYPE_BOOLEAN;
-            returned_reqdata.boolean = status;
-            if(!status)
-                out("You cannot go that way.\n");
+            returned_reqdata.boolean = (status == 1);
             break;
         }
         case REQ_GETUSERDATA:
@@ -266,8 +265,13 @@ void client_look_at(char *obj)
 
 void client_take(char *obj)
 {
-    all_lower(obj);
-    send_master(REQ_TAKE, obj, strlen(obj) + 1);
+    if(obj)
+    {
+        all_lower(obj);
+        send_master(REQ_TAKE, obj, strlen(obj) + 1);
+    }
+    else
+        out("You must supply an object.\n");
 }
 
 void client_inventory(void)

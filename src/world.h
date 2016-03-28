@@ -48,14 +48,16 @@ void world_save(const char *fname);
 /* loads the world from disk */
 bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz, const char *world_name);
 
-/** verbs **/
+/** global verbs **/
 bool world_verb_add(struct verb_t*);
 bool world_verb_del(struct verb_t*);
 
-/* gets the map of verbs */
+/* gets the map of global verbs */
 void *world_verb_map(void);
 
 void world_free(void);
 
 /* this goes in world_ and not room_ */
 struct room_t *room_get(room_id id);
+
+room_id room_get_id(const char *uniq_id);

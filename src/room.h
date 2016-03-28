@@ -20,15 +20,14 @@
 
 #include "globals.h"
 
-#include "obj.h"
-#include "verb.h"
-
 /* Our world is an array of rooms, each having a list of objects in
-   them, as well as actions that can be performed in the room. Objects
-   are added by hooks in rooms, which are provided by the world
-   module. */
+ * them, as well as actions that can be performed in them
+ * (verbs). Objects are added by hooks in rooms, which are provided as
+ * function pointers by the world module. */
 
-typedef struct child_data user_t; // definition of child_data in server.h
+struct child_data;
+struct object_t;
+struct verb_t;
 
 typedef enum room_id { ROOM_NONE = -1 } room_id;
 
@@ -43,6 +42,7 @@ struct roomdata_t {
     char *name;
     char *desc;
 
+    /* unmutable properties, changes will have no effect */
     const char * const adjacent[NUM_DIRECTIONS];
 
     void (* const hook_init)(room_id id);
@@ -50,8 +50,12 @@ struct roomdata_t {
     /* return values indicate permission to enter/leave,
      * setting to NULL defaults to true.
      */
-    bool (* const hook_enter)(room_id room, user_t *user);
-    bool (* const hook_leave)(room_id room, user_t *user);
+
+    /* NOTE: struct child_data is aliased as "user_t"!!! */
+
+    /* return false to deny entering/leaving a room */
+    bool (* const hook_enter)(room_id room, struct child_data *user);
+    bool (* const hook_leave)(room_id room, struct child_data *user);
     void (* const hook_serialize)(room_id room, int fd);
     void (* const hook_deserialize)(room_id room, int fd);
     void (* const hook_destroy)(room_id room);

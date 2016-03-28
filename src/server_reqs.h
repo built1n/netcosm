@@ -20,7 +20,7 @@
 
 #include "globals.h"
 
-typedef struct child_data user_t;
+#include "server.h"
 
 /* child<->master commands */
 /* children might not implement all of these */

@@ -21,10 +21,6 @@
 
 #include "globals.h"
 
-#include "client_reqs.h"
-#include "room.h"
-#include "userdb.h"
-
 extern int client_fd, to_parent, from_parent;
 extern bool are_admin;
 

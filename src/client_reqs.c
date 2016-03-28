@@ -19,6 +19,7 @@
 #include "globals.h"
 
 #include "client.h"
+#include "client_reqs.h"
 #include "hash.h"
 
 enum reqdata_typespec reqdata_type = TYPE_NONE;

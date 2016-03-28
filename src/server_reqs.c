@@ -21,10 +21,11 @@
 #include "hash.h"
 #include "multimap.h"
 #include "server.h"
+#include "server_reqs.h"
 #include "userdb.h"
 #include "world.h"
 
-/* sends a single packet to a child, virtually guarantees receipt */
+/* sends a single packet to a child, mostly reliable */
 static void send_packet(struct child_data *child, unsigned char cmd,
                         const void *data, size_t datalen)
 {

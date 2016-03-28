@@ -21,6 +21,7 @@
 #include "client.h"
 #include "hash.h"
 #include "server.h"
+#include "server_reqs.h"
 #include "userdb.h"
 #include "util.h"
 #include "world.h"
@@ -254,9 +255,9 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
     int readpipe[2]; /* child->parent */
     int outpipe [2]; /* parent->child */
 
-    if(pipe2(readpipe, O_DIRECT) < 0)
+    if(pipe(readpipe) < 0)
         error("error creating pipe, need linux kernel >= 3.4");
-    if(pipe2(outpipe, O_DIRECT) < 0)
+    if(pipe(outpipe) < 0)
         error("error creating pipe, need linux kernel >= 3.4");
 
     pid_t pid = fork();

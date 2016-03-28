@@ -20,10 +20,12 @@
 
 #include "auth.h"
 #include "client.h"
+#include "client_reqs.h"
 #include "hash.h"
 #include "server.h"
 #include "room.h"
 #include "telnet.h"
+#include "userdb.h"
 #include "util.h"
 
 bool are_admin = false;

@@ -21,14 +21,14 @@
 
 #define _GNU_SOURCE
 
-#include <ev.h>
+#include <libev/ev.h>
 #include <openssl/sha.h>
 #include <openssl/opensslv.h>
 
 #include <arpa/inet.h>
 #include <arpa/telnet.h>
 #include <assert.h>
-#include <bsd/string.h> // for strlcat
+//#include <bsd/string.h> // for strlcat
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>

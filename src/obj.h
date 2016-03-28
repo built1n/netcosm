@@ -21,13 +21,12 @@
 #include "globals.h"
 
 #include "room.h"
+#include "server.h"
 
 /* Objects belong to an object class. Objects define their object
  * class through the class name, which is converted to a class ID
  * internally.
  */
-
-typedef struct child_data user_t;
 
 struct object_t;
 

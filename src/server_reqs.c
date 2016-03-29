@@ -150,7 +150,7 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
     send_packet(sender, REQ_BCASTMSG, (void*)room->data.desc, strlen(room->data.desc));
 
     send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
-
+    
     /* list objects */
     char buf[MSG_MAX];
     buf[0] = 0;
@@ -230,20 +230,32 @@ static void req_set_room(unsigned char *data, size_t datalen, struct child_data 
 static void req_move_room(unsigned char *data, size_t datalen, struct child_data *sender)
 {
     (void) data; (void) datalen; (void) sender;
+
+    int status = 0;
+
     enum direction_t dir = *((enum direction_t*)data);
     struct room_t *current = room_get(sender->room);
 
-    room_user_del(sender->room, sender);
-
-    /* TODO: checking */
+    /* TODO: bounds checking on `dir' */
     room_id new = current->adjacent[dir];
-    int status = 0;
-    if(new != ROOM_NONE)
-    {
-        child_set_room(sender, new);
-        status = 1;
-    }
+    struct room_t *new_room = room_get(new);
 
+    if((!new_room->data.hook_enter ||
+	(new_room->data.hook_enter && new_room->data.hook_enter(new, sender))) &&
+       (!current->data.hook_leave ||
+        (current->data.hook_leave && current->data.hook_leave(sender->room, sender))))
+    {
+	 room_user_del(sender->room, sender);
+
+	 if(new != ROOM_NONE)
+	 {
+	      
+	      child_set_room(sender, new);
+	      status = 1;
+	 }
+	 else
+	      send_msg(sender, "You cannot go that way.\n"); 
+    }
     send_packet(sender, REQ_MOVE, &status, sizeof(status));
 }
 

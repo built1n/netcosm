@@ -46,9 +46,9 @@ void out_raw(const void *buf, size_t len)
         error("out() called from master");
     if(!len)
         return;
-
+    
 try_again:
-
+    
     while(output_locked);
 
     /* something weird happened and the value changed between the loop and here */
@@ -102,7 +102,9 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
 
             if(is_newline)
                 ++ptr; /* skip the newline */
-            while(*ptr == ' ')
+
+	    /* skip following spaces */
+	    while(*ptr == ' ')
                 ++ptr;
             last_space = 0;
             pos = 0;
@@ -186,7 +188,7 @@ tryagain:
     }
 }
 
-/* still not encrypted, but a bit more secure than echoing the password! */
+/* still not encrypted, but a bit better than echoing the password! */
 char *client_read_password(void)
 {
     telnet_echo_off();

@@ -42,6 +42,7 @@ struct roomdata_t {
     char *name;
     char *desc;
 
+    /* unmutable properties, changes will have no effect */
     const char * const adjacent[NUM_DIRECTIONS];
 
     void (* const hook_init)(room_id id);
@@ -51,6 +52,8 @@ struct roomdata_t {
      */
 
     /* NOTE: struct child_data is aliased as "user_t"!!! */
+
+    /* return false to deny entering/leaving a room */
     bool (* const hook_enter)(room_id room, struct child_data *user);
     bool (* const hook_leave)(room_id room, struct child_data *user);
     void (* const hook_serialize)(room_id room, int fd);

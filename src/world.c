@@ -29,6 +29,9 @@ static struct room_t *world;
 static size_t world_sz;
 static char *world_name;
 
+/* map of room names -> rooms */
+static void *world_map = NULL;
+
 struct room_t *room_get(room_id id)
 {
     return world + id;
@@ -124,7 +127,21 @@ void world_save(const char *fname)
             world[i].data.hook_serialize(i, fd);
     }
 
+    /* write the object counter so future objects will have sequential ids */
     write_uint64(fd, obj_get_idcounter());
+
+    /* now write the map of room names to ids */
+    void *ptr = world_map, *save;
+    for(unsigned int i = 0; i < world_sz; ++i)
+    {
+	void *key;
+	struct room_t *room = hash_iterate(ptr, &save, &key);
+	if(!room)
+	    break;
+	ptr = NULL;
+	write_string(fd, key);
+	write_roomid(fd, &room->id);
+    }
 
     close(fd);
 }
@@ -230,6 +247,18 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
 
     obj_set_idcounter(read_uint64(fd));
 
+    /* read in the room name -> room map */
+
+    world_map = hash_init(world_sz * 2, hash_djb, compare_strings);
+    
+    for(unsigned int i = 0; i < world_sz; ++i)
+    {
+	const char *key = read_string(fd);
+	room_id id  = read_roomid(fd);
+	debugf("'%s' -> %d\n", key, id);
+	hash_insert(world_map, key, world + id);
+    }
+
     close(fd);
     return true;
 }
@@ -245,7 +274,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
     world_sz = 0;
     world_name = strdup(name);
 
-    void *map = hash_init(sz / 2 + 1, hash_djb, compare_strings);
+    world_map = hash_init(sz * 2, hash_djb, compare_strings);
 
     for(size_t i = 0; i < sz; ++i)
     {
@@ -258,7 +287,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
         world[i].data.desc = strdup(world[i].data.desc);
         debugf("Loading room '%s'\n", world[i].data.uniq_id);
 
-        if(hash_insert(map, world[i].data.uniq_id, world + i))
+        if(hash_insert(world_map, world[i].data.uniq_id, world + i))
             error("Duplicate room ID '%s'", world[i].data.uniq_id);
 
         for(int dir = 0; dir < NUM_DIRECTIONS; ++dir)
@@ -266,7 +295,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
             const char *adjacent_room = world[i].data.adjacent[dir];
             if(adjacent_room)
             {
-                struct room_t *room = hash_lookup(map, adjacent_room);
+                struct room_t *room = hash_lookup(world_map, adjacent_room);
                 if(room)
                     world[i].adjacent[dir] = room->id;
             }
@@ -284,7 +313,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
             const char *adjacent_room = world[i].data.adjacent[dir];
             if(adjacent_room)
             {
-                struct room_t *room = hash_lookup(map, adjacent_room);
+                struct room_t *room = hash_lookup(world_map, adjacent_room);
                 if(room)
                     world[i].adjacent[dir] = room->id;
                 else
@@ -339,8 +368,6 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
     }
 
     hash_free(dir_map);
-
-    hash_free(map);
 }
 
 static void *verb_map = NULL;
@@ -367,4 +394,13 @@ void *world_verb_map(void)
 {
     init_map();
     return verb_map;
+}
+
+room_id room_get_id(const char *uniq_id)
+{
+    struct room_t *room = hash_lookup(world_map, uniq_id);
+    if(!room)
+	return ROOM_NONE;
+    else
+	return room->id;
 }

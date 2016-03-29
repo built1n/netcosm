@@ -39,7 +39,7 @@ DEBUGFLAGS = -g
 
 CFLAGS = $(OPTFLAGS) $(DEBUGFLAGS) $(WARNFLAGS) -std=c99 $(INCLUDES)
 
-LDFLAGS = -lev -lcrypto -lbsd
+LDFLAGS = -lev -lcrypto
 
 HEADERS = src/*.h export/include/*.h
 

@@ -47,3 +47,5 @@ void write_size(int fd, size_t);
 size_t read_size(int fd);
 
 bool is_vowel(char c);
+
+size_t strlcat(char *dst, const char *src, size_t siz);

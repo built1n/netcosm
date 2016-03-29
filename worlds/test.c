@@ -1,5 +1,7 @@
 #include <world_api.h>
 
+/* implements dunnet in NetCosm */
+
 /************ ROOM DEFINITIONS ************/
 
 static void deadend_init(room_id id)
@@ -82,6 +84,32 @@ static void hidden_init(room_id id)
     new->userdata = strdup("I see nothing special about that.");
     room_obj_add(id, new);
     room_obj_add_alias(id, new, "bracelet");
+}
+
+static bool building_enter(room_id id, user_t *user)
+{
+    if(multimap_lookup(userdb_lookup(user->user)->objects, "shiny brass key", NULL))
+        return true;
+    else
+    {
+        send_msg(user, "You don't have a key that can open this door.\n");
+        return false;
+    }
+}
+
+static void mailroom_init(room_id id)
+{
+    struct object_t *new = obj_new("/generic/notake");
+    new->name = strdup("bins");
+    new->hidden = true;
+    
+    /* insert IAC NOP to prevent the extra whitespace from being dropped */
+    new->userdata = strdup("All of the bins are empty.  Looking closely you can see that there are names written at the bottom of each bin, but most of them are faded away so that you cannot read them.  You can only make out three names:\n\377\361                   Jeffrey Collier\n\377\361                   Robert Toukmond\n\377\361                   Thomas Stock\n");
+    room_obj_add(id, new);
+}
+
+static void computer_room_init(room_id id)
+{
 }
 
 const struct roomdata_t netcosm_world[] = {
@@ -180,8 +208,47 @@ const struct roomdata_t netcosm_world[] = {
         "building_front",
         "Building Front",
         "You are at the end of the road.  There is a building in front of you to the northeast, and the road leads back to the southwest.",
-        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, "nesw_road", NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        { NONE_N, "building_hallway", NONE_E, NONE_SE, NONE_S, "nesw_road", NONE_W, NONE_NW, NONE_UP, NONE_DN, "building_hallway", NONE_OT },
         NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "building_hallway",
+        "Old Building hallway",
+        "You are in the hallway of an old building.  There are rooms to the east and west, and doors leading out to the north and south.",
+        { NONE_N, NONE_NE, "mailroom", NONE_SE, "building_front", NONE_SW, "computer_room", NONE_NW, NONE_UP, NONE_DN, NONE_IN, "building_front" },
+        NULL,
+        building_enter,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "mailroom",
+        "Mailroom",
+        "You are in a mailroom.  There are many bins where the mail is usually kept.  The exit is to the west.",
+        { NONE_N, NONE_NE, NONE_E, NONE_SE, NONE_S, NONE_SW, "building_hallway", NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        mailroom_init,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    },
+
+    {
+        "computer_room",
+        "Computer room",
+	"You are in a computer room.  It seems like most of the equipment has been removed.  There is a VAX 11/780 in front of you, however, with one of the cabinets wide open.  A sign on the front of the machine says: This VAX is named 'pokey'.  To type on the console, use the 'type' command.  The exit is to the east.\nThe panel lights are steady and motionless.",
+        { NONE_N, NONE_NE, "building_hallway", NONE_SE, NONE_S, NONE_SW, NONE_W, NONE_NW, NONE_UP, NONE_DN, NONE_IN, NONE_OT },
+        computer_room_init,
         NULL,
         NULL,
         NULL,

@@ -59,3 +59,5 @@ void world_free(void);
 
 /* this goes in world_ and not room_ */
 struct room_t *room_get(room_id id);
+
+room_id room_get_id(const char *uniq_id);

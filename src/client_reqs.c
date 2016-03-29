@@ -82,9 +82,7 @@ bool poll_requests(void)
             int status = *((int*)data);
 
             reqdata_type = TYPE_BOOLEAN;
-            returned_reqdata.boolean = status;
-            if(!status)
-                out("You cannot go that way.\n");
+            returned_reqdata.boolean = (status == 1);
             break;
         }
         case REQ_GETUSERDATA:

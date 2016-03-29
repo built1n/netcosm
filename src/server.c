@@ -408,16 +408,19 @@ int server_main(int argc, char *argv[])
     server_socket = server_bind();
 
     userdb_init(USERFILE);
-
+    
+    /* also perform first-time setup */
     check_userfile();
+
     load_worldfile();
 
+    /* initialize request map */
     reqmap_init();
 
     /* save some time after a fork() */
     client_init();
 
-    /* this initial size very low to make iteration faster */
+    /* this initial size is set very low to make iteration faster */
     child_map = hash_init(16, pid_hash, pid_equal);
     hash_setfreedata_cb(child_map, free_child_data);
     hash_setfreekey_cb(child_map, free);

@@ -198,8 +198,6 @@ char *client_read_password(void)
     return ret;
 }
 
-#define WSPACE " \t\r\n"
-
 #define CMD_OK      0
 #define CMD_LOGOUT  1
 #define CMD_QUIT    2
@@ -308,9 +306,9 @@ int client_cb(char **save)
     else if(!strcmp(what, "KICK"))
     {
         char *pid_s = strtok_r(NULL, WSPACE, save);
-        all_upper(pid_s);
         if(pid_s)
         {
+	    all_upper(pid_s);
             if(!strcmp(pid_s, "ALL"))
             {
                 const char *msg = "Kicking everyone...\n";
@@ -420,7 +418,7 @@ int go_cb(char **save)
             client_look();
     }
     else
-        out("Expected direction after GO.\n");
+        out("I don't understand where you want me to go.\n");
     return CMD_OK;
 }
 

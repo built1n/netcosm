@@ -265,8 +265,13 @@ void client_look_at(char *obj)
 
 void client_take(char *obj)
 {
-    all_lower(obj);
-    send_master(REQ_TAKE, obj, strlen(obj) + 1);
+    if(obj)
+    {
+	all_lower(obj);
+	send_master(REQ_TAKE, obj, strlen(obj) + 1);
+    }
+    else
+	out("You must supply an object.\n");
 }
 
 void client_inventory(void)

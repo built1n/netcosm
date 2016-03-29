@@ -15,6 +15,15 @@ static void deadend_init(room_id id)
     new = obj_copy(new);
     room_obj_add(id, new);
 #endif
+
+    struct verb_t *verb = verb_new("dig");
+    verb->name = strdup("dig");
+    world_verb_add(verb);
+
+    verb = verb_new("put");
+    verb->name = strdup("put");
+    world_verb_add(verb);
+
 }
 
 static void ew_road_init(room_id id)
@@ -29,30 +38,26 @@ static void ew_road_init(room_id id)
 
 static void fork_init(room_id id)
 {
-    struct verb_t *new = verb_new("dig");
-    new->name = strdup("dig");
-    room_verb_add(id, new);
-
     room_get(id)->userdata = calloc(1, sizeof(bool));
     /* flag for whether the user has already dug */
     bool *b = room_get(id)->userdata;
     *b = false;
 }
 
-static void fork_ser(room_id id, int fd)
+static void bool_ser(room_id id, int fd)
 {
     bool *b = room_get(id)->userdata;
     write_bool(fd, *b);
 }
 
-static void fork_deser(room_id id, int fd)
+static void bool_deser(room_id id, int fd)
 {
     bool *b = calloc(1, sizeof(bool));
     *b = read_bool(fd);
     room_get(id)->userdata = b;
 }
 
-static void fork_destroy(room_id id)
+static void bool_destroy(room_id id)
 {
     free(room_get(id)->userdata);
 }
@@ -110,6 +115,16 @@ static void mailroom_init(room_id id)
 
 static void computer_room_init(room_id id)
 {
+    struct object_t *new = obj_new("/generic/notake");
+    new->name = strdup("computer");
+    new->userdata = strdup("I see nothing special about that.");
+    new->hidden = true;
+
+    room_obj_add(id, new);
+    room_obj_add_alias(id, new, "vax");
+
+    /* flag for whether computer is active */
+    room_get(id)->userdata = malloc(sizeof(bool));
 }
 
 const struct roomdata_t netcosm_world[] = {
@@ -147,9 +162,9 @@ const struct roomdata_t netcosm_world[] = {
         fork_init,
         NULL,
         NULL,
-        fork_ser,
-        fork_deser,
-        fork_destroy,
+        bool_ser,
+        bool_deser,
+        bool_destroy,
     },
 
     {
@@ -251,9 +266,9 @@ const struct roomdata_t netcosm_world[] = {
         computer_room_init,
         NULL,
         NULL,
-        NULL,
-        NULL,
-        NULL,
+        bool_ser,
+	bool_deser,
+        bool_destroy,
     },
 };
 
@@ -390,6 +405,8 @@ static void dig_exec(struct verb_t *verb, char *args, user_t *user)
             goto nothing;
         }
     }
+    else
+	send_msg(user, "Digging here reveals nothing.\n");
 
     return;
 
@@ -397,19 +414,78 @@ nothing:
     send_msg(user, "Digging here reveals nothing.\n");
 }
 
+static void put_exec(struct verb_t *verb, char *args, user_t *user)
+{
+    char *save;
+    const char *obj_name = strtok_r(args, WSPACE, &save);
+
+    if(!obj_name)
+    {
+	send_msg(user, "You must supply an object\n");
+	return;
+    }
+
+    args = NULL;
+    const struct multimap_list *list = multimap_lookup(userdb_lookup(user->user)->objects,
+						       obj_name, NULL);
+    if(!list)
+    {
+	send_msg(user, "You don't have that.\n");
+	return;
+    }
+    
+    struct object_t *obj = list->val;
+
+    /* original dunnet ignores the preposition */
+    const char *prep = strtok_r(args, WSPACE, &save);
+
+    const char *ind_obj_name = strtok_r(args, WSPACE, &save);
+
+    if(!ind_obj_name)
+    {
+	send_msg(user, "You must supply an indirect object.\n");
+	return;
+    }
+
+    list = room_obj_get(user->room, ind_obj_name);
+    
+    if(!list)
+    {
+	send_msg(user, "I don't know what that indirect object is.\n");
+	return;
+    }
+
+    struct object_t *ind_obj = list->val;
+
+    /* now execute the verb */
+    if(!strcmp(obj->name, "CPU card") && !strcmp(ind_obj->name, "computer") && user->room == room_get_id("computer_room"))
+    {
+	userdb_del_obj_by_ptr(user->user, obj);
+	send_msg(user, "As you put the CPU board in the computer, it immediately springs to life.  The lights start flashing, and the fans seem to startup.\n");
+	bool *b = room_get(user->room)->userdata;
+	*b = true;
+    }
+    else
+    {
+	send_msg(user, "I don't know how to combine those objects.  Perhaps you should just try dropping it.\n");
+    }
+}
+
+/* global verbs */
+
 const struct verb_class_t netcosm_verb_classes[] = {
     { "dig",
       dig_exec },
+    { "put",
+      put_exec }, 
     /*
     { "shake",
       shake_exec },
     { "climb",
       climb_exec },
-    { "put",
-      put_exec },
     { "eat",
       eat_exec },
-    { "feed",
+      { "feed",
       feed_exec },
     */
 };

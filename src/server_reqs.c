@@ -238,24 +238,27 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
 
     /* TODO: bounds checking on `dir' */
     room_id new = current->adjacent[dir];
-    struct room_t *new_room = room_get(new);
-
-    if((!new_room->data.hook_enter ||
-	(new_room->data.hook_enter && new_room->data.hook_enter(new, sender))) &&
-       (!current->data.hook_leave ||
-        (current->data.hook_leave && current->data.hook_leave(sender->room, sender))))
+    
+    if(new == ROOM_NONE)
     {
-	 room_user_del(sender->room, sender);
-
-	 if(new != ROOM_NONE)
-	 {
-	      
-	      child_set_room(sender, new);
-	      status = 1;
-	 }
-	 else
-	      send_msg(sender, "You cannot go that way.\n"); 
+	send_msg(sender, "You cannot go that way.\n"); 
     }
+    else
+    {
+	struct room_t *new_room = room_get(new);
+	
+	if((!new_room->data.hook_enter ||
+	    (new_room->data.hook_enter && new_room->data.hook_enter(new, sender))) &&
+	   (!current->data.hook_leave ||
+	    (current->data.hook_leave && current->data.hook_leave(sender->room, sender))))
+	{
+	    room_user_del(sender->room, sender);
+	    
+	    child_set_room(sender, new);
+	    status = 1;
+	}
+    }
+
     send_packet(sender, REQ_MOVE, &status, sizeof(status));
 }
 
@@ -423,8 +426,16 @@ static void req_inventory(unsigned char *data, size_t datalen, struct child_data
                     char *article = (is_vowel(name[0])?"An":"A");
                     strlcat(buf, article, sizeof(buf));
                     strlcat(buf, " ", sizeof(buf));
+		    strlcat(buf, name, sizeof(buf));
                 }
-                strlcat(buf, name, sizeof(buf));
+		else
+		{
+		    char tmp[2];
+		    tmp[0] = toupper(name[0]);
+		    tmp[1] = '\0';
+		    strlcat(buf, tmp, sizeof(buf));
+		    strlcat(buf, name + 1, sizeof(buf));
+		}
                 strlcat(buf, "\n", sizeof(buf));
             }
             else

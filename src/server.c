@@ -255,9 +255,9 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
     int readpipe[2]; /* child->parent */
     int outpipe [2]; /* parent->child */
 
-    if(pipe(readpipe) < 0)
+    if(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, readpipe) < 0)
         error("error creating pipe, need linux kernel >= 3.4");
-    if(pipe(outpipe) < 0)
+    if(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, outpipe) < 0)
         error("error creating pipe, need linux kernel >= 3.4");
 
     pid_t pid = fork();

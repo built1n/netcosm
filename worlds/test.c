@@ -464,6 +464,8 @@ static void put_exec(struct verb_t *verb, char *args, user_t *user)
 	send_msg(user, "As you put the CPU board in the computer, it immediately springs to life.  The lights start flashing, and the fans seem to startup.\n");
 	bool *b = room_get(user->room)->userdata;
 	*b = true;
+
+	room_get(user->room)->data.desc = strdup("You are in a computer room.  It seems like most of the equipment has been removed.  There is a VAX 11/780 in front of you, however, with one of the cabinets wide open.  A sign on the front of the machine says: This VAX is named 'pokey'.  To type on the console, use the 'type' command.  The exit is to the east.\nThe panel lights are flashing in a seemingly organized pattern.");
     }
     else
     {

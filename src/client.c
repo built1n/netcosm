@@ -404,6 +404,7 @@ int take_cb(char **save)
 int wait_cb(char **save)
 {
     (void) save;
+    /* debugging */
     send_master(REQ_WAIT, NULL, 0);
     return CMD_OK;
 }
@@ -425,7 +426,10 @@ int go_cb(char **save)
 int drop_cb(char **save)
 {
     char *what = strtok_r(NULL, "", save);
-    client_drop(what);
+    if(what)
+	client_drop(what);
+    else
+	out("You must supply an object.\n");
     return CMD_OK;
 }
 
@@ -444,7 +448,7 @@ static const struct client_cmd {
     {  "LOOK",       look_cb,       false  },
     {  "INVENTORY",  inventory_cb,  false  },
     {  "TAKE",       take_cb,       false  },
-    {  "WAIT",       wait_cb,       false  },
+    {  "WAIT",       wait_cb,       true   },
     {  "GO",         go_cb,         false  },
     {  "DROP",       drop_cb,       false  },
 };

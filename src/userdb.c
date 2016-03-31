@@ -232,7 +232,7 @@ void userdb_dump(void)
             while(iter)
             {
                 struct object_t *obj = iter->val;
-                debugf(" - Obj #%lu class %s: name %s\n", obj->id, obj->class->class_name, obj->name);
+                debugf(" - Obj #%"PRI_OBJID" class %s: name %s\n", obj->id, obj->class->class_name, obj->name);
                 iter = iter->next;
             }
         }

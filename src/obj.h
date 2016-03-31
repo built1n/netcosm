@@ -54,6 +54,8 @@ struct obj_class_t {
 
 typedef uint64_t obj_id;
 
+#define PRI_OBJID PRId64
+
 struct obj_alias_t {
     char *alias;
     struct obj_alias_t *next;

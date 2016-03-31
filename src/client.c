@@ -46,9 +46,9 @@ void out_raw(const void *buf, size_t len)
         error("out() called from master");
     if(!len)
         return;
-    
+
 try_again:
-    
+
     while(output_locked);
 
     /* something weird happened and the value changed between the loop and here */
@@ -103,8 +103,8 @@ void __attribute__((format(printf,1,2))) out(const char *fmt, ...)
             if(is_newline)
                 ++ptr; /* skip the newline */
 
-	    /* skip following spaces */
-	    while(*ptr == ' ')
+            /* skip following spaces */
+            while(*ptr == ' ')
                 ++ptr;
             last_space = 0;
             pos = 0;
@@ -208,7 +208,10 @@ int user_cb(char **save)
 {
     char *what = strtok_r(NULL, WSPACE, save);
     if(!what)
+    {
+        out("Usage: USER <ADD|DEL|MODIFY|LIST> <ARGS>\n");
         return CMD_OK;
+    }
 
     all_upper(what);
 
@@ -308,7 +311,7 @@ int client_cb(char **save)
         char *pid_s = strtok_r(NULL, WSPACE, save);
         if(pid_s)
         {
-	    all_upper(pid_s);
+            all_upper(pid_s);
             if(!strcmp(pid_s, "ALL"))
             {
                 const char *msg = "Kicking everyone...\n";
@@ -338,7 +341,7 @@ int client_cb(char **save)
             debugf("Success.\n");
         }
         else
-            out("Usage: CLIENT KICK <PID>\n");
+            out("Usage: CLIENT KICK <PID|ALL>\n");
     }
     return CMD_OK;
 }
@@ -427,9 +430,53 @@ int drop_cb(char **save)
 {
     char *what = strtok_r(NULL, "", save);
     if(what)
-	client_drop(what);
+        client_drop(what);
     else
-	out("You must supply an object.\n");
+        out("You must supply an object.\n");
+    return CMD_OK;
+}
+
+int chpass_cb(char **save)
+{
+    out("Enter current password: ");
+    char *current = client_read_password();
+
+    struct userdata_t *current_data = auth_check(current_user, current);
+
+    memset(current, 0, strlen(current));
+    free(current);
+
+    if(!current_data)
+    {
+        out("Password mismatch.\n");
+        return CMD_OK;
+    }
+
+    out("Enter new password: ");
+    char *pass1 = client_read_password();
+
+    out("Retype new password: ");
+
+    char *pass2 = client_read_password();
+
+    if(strcmp(pass1, pass2))
+    {
+        memset(pass1, 0, strlen(pass1));
+        memset(pass2, 0, strlen(pass2));
+        free(pass1);
+        free(pass2);
+
+        out("Passwords do not match.\n");
+        return CMD_OK;
+    }
+
+    memset(pass2, 0, strlen(pass2));
+    free(pass2);
+
+    auth_user_add(current_user, pass1, current_data->priv);
+
+    memset(pass1, 0, strlen(pass1));
+
     return CMD_OK;
 }
 
@@ -451,6 +498,7 @@ static const struct client_cmd {
     {  "WAIT",       wait_cb,       true   },
     {  "GO",         go_cb,         false  },
     {  "DROP",       drop_cb,       false  },
+    {  "CHPASS",     chpass_cb,     false  },
 };
 
 static void *cmd_map = NULL;

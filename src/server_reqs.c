@@ -150,7 +150,7 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
     send_packet(sender, REQ_BCASTMSG, (void*)room->data.desc, strlen(room->data.desc));
 
     send_packet(sender, REQ_PRINTNEWLINE, NULL, 0);
-    
+
     /* list objects */
     char buf[MSG_MAX];
     buf[0] = 0;
@@ -189,7 +189,7 @@ static void req_send_desc(unsigned char *data, size_t datalen, struct child_data
                 {
                     strlcat(buf, "There are ", sizeof(buf));
                     char n[32];
-                    snprintf(n, sizeof(n), "%lu ", n_objs);
+                    snprintf(n, sizeof(n), "%zu ", n_objs);
                     strlcat(buf, n, sizeof(buf));
                     strlcat(buf, name, sizeof(buf));
                     strlcat(buf, "s here.\n", sizeof(buf));
@@ -238,25 +238,25 @@ static void req_move_room(unsigned char *data, size_t datalen, struct child_data
 
     /* TODO: bounds checking on `dir' */
     room_id new = current->adjacent[dir];
-    
+
     if(new == ROOM_NONE)
     {
-	send_msg(sender, "You cannot go that way.\n"); 
+        send_msg(sender, "You cannot go that way.\n");
     }
     else
     {
-	struct room_t *new_room = room_get(new);
-	
-	if((!new_room->data.hook_enter ||
-	    (new_room->data.hook_enter && new_room->data.hook_enter(new, sender))) &&
-	   (!current->data.hook_leave ||
-	    (current->data.hook_leave && current->data.hook_leave(sender->room, sender))))
-	{
-	    room_user_del(sender->room, sender);
-	    
-	    child_set_room(sender, new);
-	    status = 1;
-	}
+        struct room_t *new_room = room_get(new);
+
+        if((!new_room->data.hook_enter ||
+            (new_room->data.hook_enter && new_room->data.hook_enter(new, sender))) &&
+           (!current->data.hook_leave ||
+            (current->data.hook_leave && current->data.hook_leave(sender->room, sender))))
+        {
+            room_user_del(sender->room, sender);
+
+            child_set_room(sender, new);
+            status = 1;
+        }
     }
 
     send_packet(sender, REQ_MOVE, &status, sizeof(status));
@@ -419,34 +419,8 @@ static void req_inventory(unsigned char *data, size_t datalen, struct child_data
         struct object_t *obj = iter->val;
         if(!strcmp(name, obj->name))
         {
-            if(n_objs == 1)
-            {
-                if(obj->default_article)
-                {
-                    char *article = (is_vowel(name[0])?"An":"A");
-                    strlcat(buf, article, sizeof(buf));
-                    strlcat(buf, " ", sizeof(buf));
-		    strlcat(buf, name, sizeof(buf));
-                }
-		else
-		{
-		    char tmp[2];
-		    tmp[0] = toupper(name[0]);
-		    tmp[1] = '\0';
-		    strlcat(buf, tmp, sizeof(buf));
-		    strlcat(buf, name + 1, sizeof(buf));
-		}
-                strlcat(buf, "\n", sizeof(buf));
-            }
-            else
-            {
-                char n[32];
-                snprintf(n, sizeof(n), "%lu", n_objs);
-                strlcat(buf, n, sizeof(buf));
-                strlcat(buf, " ", sizeof(buf));
-                strlcat(buf, name, sizeof(buf));
-                strlcat(buf, "s\n", sizeof(buf));
-            }
+            format_noun(buf, sizeof(buf), name, n_objs, obj->default_article, true);
+            strlcat(buf, "\n", sizeof(buf));
 
             send_packet(sender, REQ_BCASTMSG, buf, strlen(buf));
         }

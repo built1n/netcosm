@@ -267,11 +267,11 @@ void client_take(char *obj)
 {
     if(obj)
     {
-	all_lower(obj);
-	send_master(REQ_TAKE, obj, strlen(obj) + 1);
+        all_lower(obj);
+        send_master(REQ_TAKE, obj, strlen(obj) + 1);
     }
     else
-	out("You must supply an object.\n");
+        out("You must supply an object.\n");
 }
 
 void client_inventory(void)

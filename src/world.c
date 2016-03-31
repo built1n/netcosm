@@ -134,13 +134,13 @@ void world_save(const char *fname)
     void *ptr = world_map, *save;
     for(unsigned int i = 0; i < world_sz; ++i)
     {
-	void *key;
-	struct room_t *room = hash_iterate(ptr, &save, &key);
-	if(!room)
-	    break;
-	ptr = NULL;
-	write_string(fd, key);
-	write_roomid(fd, &room->id);
+        void *key;
+        struct room_t *room = hash_iterate(ptr, &save, &key);
+        if(!room)
+            break;
+        ptr = NULL;
+        write_string(fd, key);
+        write_roomid(fd, &room->id);
     }
 
     close(fd);
@@ -250,13 +250,13 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     /* read in the room name -> room map */
 
     world_map = hash_init(world_sz * 2, hash_djb, compare_strings);
-    
+
     for(unsigned int i = 0; i < world_sz; ++i)
     {
-	const char *key = read_string(fd);
-	room_id id  = read_roomid(fd);
-	debugf("'%s' -> %d\n", key, id);
-	hash_insert(world_map, key, world + id);
+        const char *key = read_string(fd);
+        room_id id  = read_roomid(fd);
+        debugf("'%s' -> %d\n", key, id);
+        hash_insert(world_map, key, world + id);
     }
 
     close(fd);
@@ -269,7 +269,7 @@ static SIMP_EQUAL(enum direction_t, dir_equal);
 /* loads room data (supplied by the world module) into our internal format */
 void world_init(const struct roomdata_t *data, size_t sz, const char *name)
 {
-    debugf("Loading world with %lu rooms.\n", sz);
+    debugf("Loading world with %zu rooms.\n", sz);
     world = calloc(sz, sizeof(struct room_t));
     world_sz = 0;
     world_name = strdup(name);
@@ -400,7 +400,7 @@ room_id room_get_id(const char *uniq_id)
 {
     struct room_t *room = hash_lookup(world_map, uniq_id);
     if(!room)
-	return ROOM_NONE;
+        return ROOM_NONE;
     else
-	return room->id;
+        return room->id;
 }

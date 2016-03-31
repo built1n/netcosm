@@ -188,9 +188,9 @@ bool is_vowel(char c)
     }
 }
 
-/*	$NetBSD: strlcat.c,v 1.4 2005/05/16 06:55:48 lukem Exp $	*/
-/*	from	NetBSD: strlcat.c,v 1.16 2003/10/27 00:12:42 lukem Exp	*/
-/*	from OpenBSD: strlcat.c,v 1.10 2003/04/12 21:56:39 millert Exp	*/
+/*      $NetBSD: strlcat.c,v 1.4 2005/05/16 06:55:48 lukem Exp $        */
+/*      from    NetBSD: strlcat.c,v 1.16 2003/10/27 00:12:42 lukem Exp  */
+/*      from OpenBSD: strlcat.c,v 1.10 2003/04/12 21:56:39 millert Exp  */
 
 /*
  * Copyright (c) 1998 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -218,27 +218,62 @@ bool is_vowel(char c)
 size_t
 strlcat(char *dst, const char *src, size_t siz)
 {
-	char *d = dst;
-	const char *s = src;
-	size_t n = siz;
-	size_t dlen;
+        char *d = dst;
+        const char *s = src;
+        size_t n = siz;
+        size_t dlen;
 
-	/* Find the end of dst and adjust bytes left but don't go past end */
-	while (n-- != 0 && *d != '\0')
-		d++;
-	dlen = d - dst;
-	n = siz - dlen;
+        /* Find the end of dst and adjust bytes left but don't go past end */
+        while (n-- != 0 && *d != '\0')
+                d++;
+        dlen = d - dst;
+        n = siz - dlen;
 
-	if (n == 0)
-		return(dlen + strlen(s));
-	while (*s != '\0') {
-		if (n != 1) {
-			*d++ = *s;
-			n--;
-		}
-		s++;
-	}
-	*d = '\0';
+        if (n == 0)
+                return(dlen + strlen(s));
+        while (*s != '\0') {
+                if (n != 1) {
+                        *d++ = *s;
+                        n--;
+                }
+                s++;
+        }
+        *d = '\0';
 
-	return(dlen + (s - src));	/* count does not include NUL */
+        return(dlen + (s - src));       /* count does not include NUL */
+}
+
+char *format_noun(char *buf, size_t len, const char *name, size_t count, bool default_article, bool capitalize)
+{
+    assert(len > 1);
+    buf[0] = '\0';
+    if(count == 1)
+    {
+        if(default_article)
+        {
+            char *article = capitalize?(is_vowel(name[0])? "An" : "A"):(is_vowel(name[0])? "an" : "a");
+            strlcat(buf, article, len);
+            strlcat(buf, " ", len);
+            strlcat(buf, name, len);
+        }
+        else
+        {
+            char tmp[2];
+            tmp[0] = toupper(name[0]);
+            tmp[1] = '\0';
+            strlcat(buf, tmp, len);
+            strlcat(buf, name + 1, len);
+        }
+    }
+    else
+    {
+        char n[32];
+        snprintf(n, sizeof(n), "%zu", count);
+        strlcat(buf, n, len);
+        strlcat(buf, " ", len);
+        strlcat(buf, name, len);
+        strlcat(buf, "s", len);
+    }
+
+    return buf;
 }

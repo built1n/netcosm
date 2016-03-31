@@ -23,7 +23,7 @@
 #include "server.h"
 
 /* child<->master commands */
-/* children might not implement all of these */
+/* not all of these are implemented by both parties */
 /* meanings might be different for the server and child, see comments */
 #define REQ_NOP               0 /* server, child: do nothing (used for acknowledgement) */
 #define REQ_BCASTMSG          1 /* server: broadcast text; child: print following text */
@@ -32,7 +32,7 @@
 #define REQ_CHANGEUSER        4 /* server: change child login name */
 #define REQ_HANG              5 /* <UNIMP> server: loop forever */
 #define REQ_KICK              6 /* server: kick PID with message; child: print message, quit */
-#define REQ_WAIT              7 /* server: sleep 10s */
+#define REQ_WAIT              7 /* <DEBUG> server: sleep 10s */
 #define REQ_GETROOMDESC       8 /* server: send child room description */
 #define REQ_SETROOM           9 /* server: set child room */
 #define REQ_MOVE              10 /* server: move child based on direction; child: success or failure */
@@ -50,6 +50,7 @@
 #define REQ_DROP              22 /* server: drop user object if allowed */
 #define REQ_LISTUSERS         23 /* server: list users in USERFILE */
 #define REQ_EXECVERB          24 /* server: execute a verb with its arguments */
+#define REQ_RAWMODE           25 /* child: toggle the child's processing of commands and instead sending input directly to master */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */

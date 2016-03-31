@@ -51,3 +51,6 @@ size_t read_size(int fd);
 bool is_vowel(char c);
 
 size_t strlcat(char *dst, const char *src, size_t siz);
+
+/* formats a noun's name */
+char *format_noun(char *buf, size_t len, const char *name, size_t count, bool default_article, bool capitalize);

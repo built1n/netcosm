@@ -193,11 +193,12 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
     {
         debugf("auth module: user %s found\n", name2);
 
-        /* hashes are in HEX to avoid the Trucha bug */
+        /* hashes are in lowercase hex to avoid the Trucha bug
+         * but still allow comparison with strcmp() */
         char *new_hash_hex = hash_pass_hex(pass, salt);
 
         bool success = true;
-        /* constant-time comparison to a timing attack */
+        /* constant-time comparison to hopefully prevent a timing attack */
         for(int i = 0; i < AUTH_HASHLEN; ++i)
         {
             if(new_hash_hex[i] != hash[i])

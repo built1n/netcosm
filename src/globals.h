@@ -21,17 +21,18 @@
 
 #define _GNU_SOURCE
 
-#include <libev/ev.h>
+#include <ev.h>
+
 #include <openssl/sha.h>
 #include <openssl/opensslv.h>
 
 #include <arpa/inet.h>
 #include <arpa/telnet.h>
 #include <assert.h>
-//#include <bsd/string.h> // for strlcat
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -66,7 +67,7 @@
 #define WORLD_MAGIC  0x31415926
 #define USERDB_MAGIC 0x27182818
 #define MAX_FAILURES 3
-#define NETCOSM_VERSION "0.5.0"
+#define NETCOSM_VERSION "0.5.1"
 
 /* username length */
 #define MAX_NAME_LEN 32

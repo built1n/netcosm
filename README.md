@@ -1,7 +1,7 @@
 NetCosm
 =======
 
-NetCosm is currently under development. Things /WILL/ break, and
+NetCosm is currently under development. Things WILL break, and
 features might drift out of existence without prior warning!
 
 ## Installation
@@ -9,10 +9,7 @@ features might drift out of existence without prior warning!
 ### Prerequisites:
 
 * openssl (for password hashing)
-* libbsd (for strlcpy)
 * libev
-* linux >= 3.4 (for "packet mode" pipes)
-* glibc >= 2.9
 
 ### Compiling
 
@@ -45,8 +42,9 @@ A child process is spawned for every client that connects.  There are
 two pipes created for every child: a pipe for the child to write to,
 and a pipe for the master to write to.
 
-Both of these pipes are created in "packet mode" (see pipe(2)), and
-therefore require at least linux 3.4 and glibc 2.9.
+Both of these pipes are created in "packet mode" (see pipe(2)) if
+available, and as UNIX domain socket pairs if not, which is slightly
+wasteful.s
 
 Many operations, such as listing clients, require the help of the
 master process. To request an operation, the child writes its request
@@ -89,7 +87,7 @@ latency.
 
 Versions are numbered using the MAJOR.MINOR.BUGFIX scheme.
 
-The latest version is 0.5.0.
+The latest version is 0.5.1.
 
 Major versions mark major milestones (see below), minor versions mark
 incremental milestones and compatibility of data files, and bugfix

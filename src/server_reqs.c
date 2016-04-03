@@ -133,7 +133,10 @@ static void req_kick_client(unsigned char *data, size_t datalen,
     {
         pid_t kicked_pid = *((pid_t*)data);
         if(kicked_pid == child->pid)
+        {
             send_packet(child, REQ_KICK, data + sizeof(pid_t), datalen - sizeof(pid_t));
+            send_msg(sender, "Success.\n");
+        }
     }
 }
 
@@ -625,7 +628,7 @@ bool handle_child_req(int in_fd)
 
     struct child_request *req = hash_lookup(request_map, &cmd);
 
-    debugf("Child %d sends request %d\n", sender_pid, cmd);
+    //debugf("Child %d sends request %d\n", sender_pid, cmd);
 
     if(!req)
     {

@@ -20,13 +20,13 @@
 
 #include "globals.h"
 
-#define SALT_LEN 12
+#define SALT_LEN 16
 #define AUTH_HASHLEN SHA512_DIGEST_LENGTH
 #define AUTH_HASHFUNC SHA512
-//#define HASH_ITERS 500000
 #define HASH_ITERS 1
+//#define HASH_ITERS 1
 
-/* makes admin account */
+/* makes admin account based on terminal input */
 void first_run_setup(void);
 
 struct userdata_t;

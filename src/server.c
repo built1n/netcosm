@@ -41,7 +41,7 @@ static uint16_t port = DEFAULT_PORT;
 
 static int server_socket;
 
-#define SAVE_INTERVAL 8
+#define SAVE_INTERVAL 10
 
 /* saves state periodically */
 void server_save_state(bool force)
@@ -111,7 +111,7 @@ static void handle_client(int fd, struct sockaddr_in *addr,
     client_main(fd, addr, nclients, to, from);
 }
 
-static void __attribute__((noreturn)) server_cleanup(void)
+static void __attribute__((noreturn)) server_shutdown(void)
 {
     if(!are_child)
         debugf("Shutdown server.\n");
@@ -150,7 +150,7 @@ static void __attribute__((noreturn)) server_cleanup(void)
     /* shut down libev */
     ev_default_destroy();
 
-    exit(0);
+    _exit(0);
 }
 
 static void __attribute__((noreturn)) sigint_handler(int s)
@@ -170,6 +170,7 @@ static void check_userfile(void)
             first_run_setup();
         else
             auth_user_add(autouser, autopass, PRIV_ADMIN);
+        userdb_write(USERFILE);
     }
 
     if(access(USERFILE, R_OK | W_OK) < 0)
@@ -269,11 +270,7 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
             else
                 debugf("WARNING: Using a SOCK_DGRAM socket pair for IPC, performance may be degraded.\n");
         }
-        else
-            debugf("Using a SOCK_SEQPACKET socket pair for IPC.\n");
     }
-    else
-        debugf("Using a packet-mode pipe for IPC.\n");
 
     if(pipe2(outpipe, O_DIRECT) < 0)
     {
@@ -311,8 +308,6 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
 
         /* shut down libev */
         ev_default_destroy();
-
-        debugf("Child with PID %d spawned\n", getpid());
 
         server_socket = new_sock;
 
@@ -449,7 +444,7 @@ int server_main(int argc, char *argv[])
     hash_setfreedata_cb(child_map, free_child_data);
     hash_setfreekey_cb(child_map, free);
 
-    debugf("Listening on port %d\n", port);
+    debugf("Listening on port %d.\n", port);
 
     server_socket = server_bind();
 
@@ -465,7 +460,7 @@ int server_main(int argc, char *argv[])
 
     ev_io_start(EV_A_ &server_watcher);
 
-    atexit(server_cleanup);
+    atexit(server_shutdown);
 
     /* everything's ready, hand it over to libev */
     ev_loop(loop, 0);

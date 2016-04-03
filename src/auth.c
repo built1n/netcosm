@@ -20,6 +20,7 @@
 
 #include "auth.h"
 #include "client.h"
+#include "server.h"
 #include "userdb.h"
 
 static bool valid_login_name(const char *name);
@@ -38,7 +39,7 @@ static char *hash_pass_hex(const char *pass, const char *salt)
 
     unsigned char hash[AUTH_HASHLEN];
 
-    SHA512(salted, pass_len + SALT_LEN, hash);
+    AUTH_HASHFUNC(salted, pass_len + SALT_LEN, hash);
 
     unsigned char tmp[AUTH_HASHLEN];
     /* now hash the hash a million times to slow things down */
@@ -176,13 +177,16 @@ void first_run_setup(void)
 
 struct userdata_t *auth_check(const char *name2, const char *pass2)
 {
+    if(!are_child)
+        debugf("WARNING: auth_check called from master!\n");
+
     /* get our own copy to remove newlines */
     char *name = strdup(name2);
     char *pass = strdup(pass2);
     remove_cruft(name);
     remove_cruft(pass);
 
-    /* find it in the user list */
+    /* request data from the master process */
     struct userdata_t *data = userdb_request_lookup(name);
 
     free(name);
@@ -191,8 +195,6 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
 
     if(data)
     {
-        debugf("auth module: user %s found\n", name2);
-
         /* hashes are in lowercase hex to avoid the Trucha bug
          * but still allow comparison with strcmp() */
         char *new_hash_hex = hash_pass_hex(pass, salt);
@@ -216,12 +218,13 @@ struct userdata_t *auth_check(const char *name2, const char *pass2)
         }
     }
 
-    debugf("auth failure for user %s\n", name2);
+    debugf("Authentication failure for user %s\n", name2);
 
     memset(pass, 0, strlen(pass));
     free(pass);
 
-    /* failure */
+    /* failure: note that this function should be run exclusively by
+     * child processes */
     sleep(2);
     return NULL;
 }

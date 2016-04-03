@@ -144,7 +144,7 @@ struct object_t *obj_copy(struct object_t *obj)
 
 struct object_t *obj_dup(struct object_t *obj)
 {
-    debugf("Adding an object reference to #%" PRI_OBJID ".\n", obj->id);
+    //debugf("Adding an object reference to #%" PRI_OBJID ".\n", obj->id);
     ++obj->refcount;
     return obj;
 }
@@ -154,11 +154,9 @@ void obj_free(void *ptr)
     struct object_t *obj = ptr;
     --obj->refcount;
 
-    debugf("Freeing an object reference for #%" PRI_OBJID" (%s, %d).\n", obj->id, obj->name, obj->refcount);
-
     if(!obj->refcount)
     {
-        debugf("Freeing object #%"PRI_OBJID"\n", obj->id);
+        //debugf("Freeing object #%"PRI_OBJID"\n", obj->id);
         if(obj->class->hook_destroy)
             obj->class->hook_destroy(obj);
 

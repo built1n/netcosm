@@ -83,8 +83,6 @@ void world_save(const char *fname)
         size_t n_objects = room_obj_count_noalias(i);
         write(fd, &n_objects, sizeof(n_objects));
 
-        debugf("Room %d has %d objects.\n", i, n_objects);
-
         room_id id = i;
         void *save;
         while(1)
@@ -101,7 +99,6 @@ void world_save(const char *fname)
                 const char *name = iter->key;
                 if(!strcmp(name, obj->name))
                 {
-                    debugf("writing object '%s' in room %d\n", obj->name, i);
                     obj_write(fd, obj);
                 }
                 iter = iter->next;
@@ -132,7 +129,7 @@ void world_save(const char *fname)
 
     /* now write the map of room names to ids */
     void *ptr = world_map, *save;
-    for(unsigned int i = 0; i < world_sz; ++i)
+    while(1)
     {
         void *key;
         struct room_t *room = hash_iterate(ptr, &save, &key);
@@ -158,6 +155,7 @@ void world_free(void)
         }
 
         hash_free(world_verb_map());
+        hash_free(world_map);
 
         free(world);
         world = NULL;
@@ -255,7 +253,6 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     {
         const char *key = read_string(fd);
         room_id id  = read_roomid(fd);
-        debugf("'%s' -> %d\n", key, id);
         hash_insert(world_map, key, world + id);
     }
 
@@ -285,7 +282,7 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
         //world[i].uniq_id = strdup(world[i].uniq_id);
         world[i].data.name = strdup(world[i].data.name);
         world[i].data.desc = strdup(world[i].data.desc);
-        debugf("Loading room '%s'\n", world[i].data.uniq_id);
+        //debugf("Loading room '%s'\n", world[i].data.uniq_id);
 
         if(hash_insert(world_map, world[i].data.uniq_id, world + i))
             error("Duplicate room ID '%s'", world[i].data.uniq_id);
@@ -386,7 +383,7 @@ static void init_map(void)
 bool world_verb_add(struct verb_t *verb)
 {
     init_map();
-    debugf("Added global verb %s\n", verb->name);
+    //debugf("Added global verb %s\n", verb->name);
     return !hash_insert(verb_map, verb->name, verb);
 }
 

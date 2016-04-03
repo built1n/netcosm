@@ -110,8 +110,6 @@ void userdb_init(const char *file)
 
 bool userdb_write(const char *file)
 {
-    debugf("Writing userdb...\n");
-
     int fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if(fd < 0)
         return false;
@@ -154,7 +152,6 @@ bool userdb_write(const char *file)
                     struct object_t *obj = iter->val;
                     if(!strcmp(iter->key, obj->name))
                     {
-                        debugf("Writing an object to disk...\n");
                         obj_write(fd, iter->val);
                     }
                     iter = iter->next;
@@ -163,8 +160,6 @@ bool userdb_write(const char *file)
         }
     }
     close(fd);
-
-    debugf("Done writing userdb.\n");
 
     return true;
 }
@@ -178,7 +173,7 @@ bool userdb_remove(const char *key)
 {
     if(hash_remove(map, key))
     {
-        userdb_write(db_file);
+        server_save_state(false);
         return true;
     }
     return false;
@@ -186,6 +181,8 @@ bool userdb_remove(const char *key)
 
 bool userdb_add(struct userdata_t *data)
 {
+    if(!data)
+        return false;
     struct userdata_t *new = calloc(1, sizeof(*new)); /* only in C! */
     memcpy(new, data, sizeof(*new));
 
@@ -206,7 +203,9 @@ bool userdb_add(struct userdata_t *data)
 
     hash_overwrite(map, new->username, new);
 
-    return userdb_write(db_file);
+    server_save_state(false);
+
+    return true;
 }
 
 void userdb_dump(void)

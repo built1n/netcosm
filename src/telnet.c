@@ -36,7 +36,7 @@ uint16_t telnet_get_height(void)
     return term_height;
 }
 
-enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
+enum telnet_status telnet_parse_data(unsigned char *buf, size_t buflen)
 {
     bool iac = false;
     bool found_cmd = false;
@@ -51,6 +51,8 @@ enum telnet_status telnet_parse_data(const unsigned char *buf, size_t buflen)
             iac = true;
         else if(c == '\n' || c == '\r')
             line_done = true;
+        else if(c == '\0') // ignore NULLs
+            buf[i] = ' ';
 
         if(iac)
         {

@@ -44,7 +44,8 @@ and a pipe for the master to write to.
 
 Both of these pipes are created in "packet mode" (see pipe(2)) if
 available, and as UNIX domain socket pairs if not, which is slightly
-wasteful.s
+wasteful, as they are full-duplex but only used in a half-duplex
+manner.
 
 Many operations, such as listing clients, require the help of the
 master process. To request an operation, the child writes its request
@@ -98,17 +99,15 @@ number.
 
 #### 0.4.0 (skipped)
 
-* Object support [DONE]
+* Object support
 
-* User inventory support [DONE]
-
-### Roadmap
+* User inventory support
 
 #### 0.5.0
 
-* Verb support [DONE]
+* Verb support
 
-* World hooks/scripting [DONE]
+* World hooks/scripting
 
 ##### 0.5.1
 
@@ -118,6 +117,8 @@ number.
 
 * Many bugfixes
 
+### Roadmap
+
 #### 0.6.0
 
 * NPC users
@@ -125,3 +126,7 @@ number.
 #### 0.7.0
 
 * Dynamic world editing
+
+#### 1.0.0
+
+* Procedural generation

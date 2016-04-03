@@ -126,6 +126,7 @@ static void mailroom_init(room_id id)
     /* insert IAC NOP to prevent the extra whitespace from being dropped */
     new->userdata = strdup("All of the bins are empty.  Looking closely you can see that there are names written at the bottom of each bin, but most of them are faded away so that you cannot read them.  You can only make out three names:\n\377\361                   Jeffrey Collier\n\377\361                   Robert Toukmond\n\377\361                   Thomas Stock\n");
     room_obj_add(id, new);
+    room_obj_add_alias(id, new, "mail bins");
 }
 
 static void computer_room_init(room_id id)
@@ -140,6 +141,8 @@ static void computer_room_init(room_id id)
 
     /* flag for whether computer is active */
     room_get(id)->userdata = malloc(sizeof(bool));
+    bool *b = room_get(id)->userdata;
+    *b = false;
 }
 
 const struct roomdata_t netcosm_world[] = {
@@ -589,8 +592,6 @@ const struct verb_class_t netcosm_verb_classes[] = {
       type_exec },
     { "climb",
       climb_exec },
-    */
-    /*
       { "feed",
       feed_exec },
     */

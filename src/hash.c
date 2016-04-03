@@ -371,6 +371,14 @@ void hash_del_internal_node(void *ptr, const struct hash_export_node *node)
             struct hash_map *map = ptr;
             CHECK_SENTINEL(map);
 
+            struct hash_node *node_val = node->node;
+
+            if(map->free_data)
+                map->free_data((void*)node_val->data);
+            if(map->free_key)
+                map->free_key((void*)node_val->key);
+            free(node_val);
+
             if(node->last)
                 ((struct hash_node*)node->last)->next = node->next;
             else

@@ -158,7 +158,7 @@ tryagain:
                 {
                     ssize_t len = read(client_fd, buf + bufidx, CLIENT_READ_SZ - bufidx - 1);
                     if(len <= 0)
-                        error("lost connection (%d)", fds[i].revents);
+                        error("lost connection");
 
                     buf[CLIENT_READ_SZ - 1] = '\0';
 
@@ -316,6 +316,7 @@ int client_cb(char **save)
             {
                 const char *msg = "Kicking everyone...\n";
                 send_master(REQ_KICKALL, msg, strlen(msg));
+                out("All clients kicked.\n");
                 return CMD_OK;
             }
             /* weird pointer voodoo */
@@ -338,7 +339,6 @@ int client_cb(char **save)
                                                sizeof(pidbuf) - sizeof(pid_t),
                                                "You were kicked.\n");
             send_master(REQ_KICK, pidbuf, len);
-            debugf("Success.\n");
         }
         else
             out("Usage: CLIENT KICK <PID|ALL>\n");
@@ -438,6 +438,8 @@ int drop_cb(char **save)
 
 int chpass_cb(char **save)
 {
+    (void) save;
+    out("Changing password for %s\n", current_user);
     out("Enter current password: ");
     char *current = client_read_password();
 
@@ -448,7 +450,7 @@ int chpass_cb(char **save)
 
     if(!current_data)
     {
-        out("Password mismatch.\n");
+        out("Authentication failed.\n");
         return CMD_OK;
     }
 
@@ -476,6 +478,8 @@ int chpass_cb(char **save)
     auth_user_add(current_user, pass1, current_data->priv);
 
     memset(pass1, 0, strlen(pass1));
+
+    out("Password updated.\n");
 
     return CMD_OK;
 }
@@ -526,10 +530,8 @@ void client_main(int fd, struct sockaddr_in *addr, int total, int to, int from)
     telnet_init();
 
     char *ip = inet_ntoa(addr->sin_addr);
-    debugf("New client %s\n", ip);
+    debugf("== New client %s ==\n", ip);
     debugf("Total clients: %d\n", total);
-
-    debugf("client is running with uid %d\n", getuid());
 
 auth:
 
@@ -597,7 +599,7 @@ auth:
         client_change_state(STATE_LOGGEDIN);
 
     /* authenticated, begin main command loop */
-    debugf("client: Authenticated as %s\n", current_user);
+    debugf("Client %s: authenticated as %s.\n", ip, current_user);
     client_change_user(current_user);
     current_room = 0;
 

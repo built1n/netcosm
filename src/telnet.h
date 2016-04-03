@@ -27,7 +27,7 @@ enum telnet_status { TELNET_DATA = 0,
                      TELNET_LINEOVER,
                      TELNET_EXIT };
 
-enum telnet_status telnet_parse_data(const unsigned char*, size_t);
+enum telnet_status telnet_parse_data(unsigned char*, size_t);
 
 uint16_t telnet_get_width(void);
 uint16_t telnet_get_height(void);

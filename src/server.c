@@ -277,7 +277,7 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
         if(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, outpipe) < 0)
         {
             if(socketpair(AF_UNIX, SOCK_DGRAM, 0, outpipe) < 0)
-                error("error creating pipe, need linux kernel >= 3.4");
+                error("error creating IPC pipe");
         }
     }
 
@@ -290,7 +290,7 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
         /* child */
         are_child = true;
 
-        /* close our file descriptors */
+        /* close unused file descriptors */
         close(readpipe[0]);
         close(outpipe[1]);
         close(server_socket);
@@ -396,7 +396,12 @@ static void parse_args(int argc, char *argv[])
                     autopass = argv[++i];
                     break;
                 case 'd': /* set data prefix */
-                    chdir(argv[++i]);
+                    mkdir(argv[++i], 0700);
+                    if(chdir(argv[i]) < 0)
+                    {
+                        debugf("Cannot access data prefix.\n");
+                        exit(0);
+                    }
                     break;
                 default:
                     c = 'h';

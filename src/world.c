@@ -248,6 +248,7 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     /* read in the room name -> room map */
 
     world_map = hash_init(world_sz * 2, hash_djb, compare_strings);
+    hash_setfreekey_cb(world_map, free);
 
     for(unsigned int i = 0; i < world_sz; ++i)
     {

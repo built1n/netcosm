@@ -28,6 +28,22 @@ the CAP_NET_BIND_SERVICE capability on Linux:
 If running as root, you will need an unprivileged user called 'nobody'
 on your system in order for things to work.
 
+After granting permissions, if necessary, start the server and run the
+initial setup process.
+
+    $ ./build/unix.bin 23
+    *** NetCosm 0.5.2 (libev 4.20, OpenSSL 1.0.2g  1 Mar 2016) ***
+    Welcome to NetCosm!
+    Please set up the administrator account now.
+    Admin account name: blah
+    Admin password (_DO_NOT_ USE A VALUABLE PASSWORD): password here
+    Add user 'blah'
+    Listening on port 23.
+
+Then connect to the server and start playing:
+
+    telnet localhost
+
 ## Todo List
 
 * Game scripting
@@ -88,7 +104,7 @@ latency.
 
 Versions are numbered using the MAJOR.MINOR.BUGFIX scheme.
 
-The latest version is 0.5.1.
+The latest version is 0.5.2.
 
 Major versions mark major milestones (see below), minor versions mark
 incremental milestones and compatibility of data files, and bugfix

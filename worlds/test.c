@@ -38,6 +38,10 @@ static void deadend_init(room_id id)
     verb = verb_new("shake");
     verb->name = strdup("shake");
     world_verb_add(verb);
+
+    verb = verb_new("type");
+    verb->name = strdup("type");
+    world_verb_add(verb);
 }
 
 static void ew_road_init(room_id id)
@@ -138,6 +142,7 @@ static void computer_room_init(room_id id)
 
     room_obj_add(id, new);
     room_obj_add_alias(id, new, "vax");
+    room_obj_add_alias(id, new, "pokey");
 
     /* flag for whether computer is active */
     room_get(id)->userdata = malloc(sizeof(bool));
@@ -485,6 +490,7 @@ static void put_exec(struct verb_t *verb, char *args, user_t *user)
         bool *b = room_get(user->room)->userdata;
         *b = true;
 
+        free(room_get(user->room)->data.desc);
         room_get(user->room)->data.desc = strdup("You are in a computer room.  It seems like most of the equipment has been removed.  There is a VAX 11/780 in front of you, however, with one of the cabinets wide open.  A sign on the front of the machine says: This VAX is named 'pokey'.  To type on the console, use the 'type' command.  The exit is to the east.\nThe panel lights are flashing in a seemingly organized pattern.");
     }
     else
@@ -571,9 +577,39 @@ static void shake_exec(struct verb_t *verb, char *args, user_t *user)
         char buf[MSG_MAX];
         send_msg(user, "Shaking %s seems to have no effect.\n",
                  format_noun(buf, sizeof(buf), obj->name,
-                             n_objs_room, obj->default_article,
+                             n_objs_inv, obj->default_article,
                              false));
     }
+}
+
+static void type_exec(struct verb_t *verb, char *args, user_t *user)
+{
+    (void) verb;
+    (void) args;
+
+    struct room_t *room = room_get(user->room);
+    if(strcmp(room->data.uniq_id, "computer_room"))
+        send_msg(user, "There is nothing here on which you could type.\n");
+    else
+    {
+        bool *b = room->userdata;
+
+        /* computer is not active */
+        if(!*b)
+        {
+            send_msg(user, "You type on the keyboard, but your characters do not even echo.\n");
+            return;
+        }
+        else
+        {
+            send_msg(user, "FIXME\n");
+        }
+    }
+}
+
+static void climb_exec(struct verb_t *verb, char *args, user_t *user)
+{
+
 }
 
 /* verb classes */
@@ -587,9 +623,9 @@ const struct verb_class_t netcosm_verb_classes[] = {
       eat_exec },
     { "shake",
       shake_exec },
-    /*
     { "type",
       type_exec },
+    /*
     { "climb",
       climb_exec },
       { "feed",

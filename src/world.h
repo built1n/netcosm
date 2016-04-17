@@ -26,19 +26,23 @@
 
 /* the world module MUST define all of the following: */
 
+#ifndef _WORLD_MODULE_
+/* note that these are now dynamically loaded */
+
 /* verb classes */
-extern const struct verb_class_t netcosm_verb_classes[];
-extern const size_t netcosm_verb_classes_sz;
+extern const struct verb_class_t *netcosm_verb_classes;
+extern size_t netcosm_verb_classes_sz;
 
 /* object classes */
-extern const struct obj_class_t netcosm_obj_classes[];
-extern const size_t netcosm_obj_classes_sz;
+extern const struct obj_class_t *netcosm_obj_classes;
+extern size_t netcosm_obj_classes_sz;
 
 /* rooms */
-extern const struct roomdata_t netcosm_world[];
-extern const size_t netcosm_world_sz;
+extern const struct roomdata_t *netcosm_world;
+extern size_t netcosm_world_sz;
 
 extern const char *netcosm_world_name;
+#endif
 
 /*** loads the world into RAM for the first time, resets the game state ***/
 void world_init(const struct roomdata_t *data, size_t sz, const char *name);

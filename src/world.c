@@ -23,6 +23,20 @@
 #include "room.h"
 #include "world.h"
 
+/* verb classes */
+const struct verb_class_t *netcosm_verb_classes;
+size_t netcosm_verb_classes_sz;
+
+/* object classes */
+const struct obj_class_t *netcosm_obj_classes;
+size_t netcosm_obj_classes_sz;
+
+/* rooms */
+const struct roomdata_t *netcosm_world;
+size_t netcosm_world_sz;
+
+const char *netcosm_world_name;
+
 /* processed world data */
 
 static struct room_t *world;
@@ -184,7 +198,10 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     read(fd, &world_sz, sizeof(world_sz));
 
     if(world_sz != data_sz)
+    {
+        debugf("Incompatible world state.\n");
         return false;
+    }
 
     world = calloc(world_sz, sizeof(struct room_t));
 
@@ -192,9 +209,11 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     if(strcmp(name, world_name))
     {
         free(world_name);
-        debugf("Incompatible world state.\n");
+        debugf("Incompatible world state (%s %s).\n", name, world_name);
         return false;
     }
+
+    debugf("Loading world `%s'.\n", world_name);
 
     obj_set_idcounter(1);
 

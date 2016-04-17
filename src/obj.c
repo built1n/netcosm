@@ -21,6 +21,7 @@
 #include "hash.h"
 #include "multimap.h"
 #include "obj.h"
+#include "world.h"
 
 /* map of class names -> object classes */
 static void *obj_class_map = NULL;
@@ -41,8 +42,6 @@ struct object_t *obj_new(const char *class_name)
 {
     if(!obj_class_map)
     {
-        extern const struct obj_class_t netcosm_obj_classes[];
-        extern const size_t netcosm_obj_classes_sz;
         obj_class_map = hash_init(netcosm_obj_classes_sz / 2 + 1,
                                   hash_djb,
                                   compare_strings);

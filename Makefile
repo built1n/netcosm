@@ -27,19 +27,22 @@ PLATFORM = unix
 OUT = $(BUILDDIR)/$(PLATFORM).bin
 PREFIX = /usr/local
 
-SRC = $(shell cat SOURCES)
-OBJ = $(patsubst %.c,$(BUILDDIR)/%.o,$(SRC))
+SRC = $(shell cat src/SOURCES)
+OBJ = $(patsubst %.c,$(BUILDDIR)/src/%.o,$(SRC))
+
+WORLD_SRC = $(shell cat worlds/SOURCES)
+WORLD_OBJ = $(patsubst %.c,$(BUILDDIR)/worlds/%.so,$(WORLD_SRC))
 
 INCLUDES = -I src/ -I export/include/
 
 WARNFLAGS = -Wall -Wextra -Wshadow -fno-strict-aliasing
 
 OPTFLAGS = -O2
-DEBUGFLAGS = -g -fstack-protector -D_FORTIFY_SOURCE=2
+DEBUGFLAGS = -g -fstack-protector
 
 CFLAGS = $(OPTFLAGS) $(DEBUGFLAGS) $(WARNFLAGS) -std=c99 $(INCLUDES)
 
-LDFLAGS = -lev -lcrypto
+LDFLAGS = -lev -lcrypto -ldl
 
 HEADERS = src/*.h export/include/*.h
 
@@ -49,11 +52,11 @@ DEPS = $(patsubst %.c,$(BUILDDIR)/%.d,$(SRC))
 ################################################################################
 
 .PHONY: all
-all: | $(OUT)
+all: | $(OUT) $(WORLD_OBJ)
 
 $(OUT): $(OBJ)
 	@echo "LD $@"
-	@$(CC) $(OBJ) $(CFLAGS) -o $@ $(LDFLAGS)
+	@$(CC) $(OBJ) $(CFLAGS) -o $@ $(LDFLAGS) -rdynamic
 
 $(OBJ): | $(BUILDDIR)
 
@@ -64,6 +67,11 @@ $(BUILDDIR)/%.o: %.c $(BUILDDIR)/%.d Makefile
 	@echo "CC $<"
 	@mkdir -p `dirname $@`
 	@$(CC) -c $< $(CFLAGS) -o $@
+
+$(BUILDDIR)/%.so: %.c $(BUILDDIR)/%.d Makefile
+	@echo "CC $<"
+	@mkdir -p `dirname $@`
+	@$(CC) $< $(CFLAGS) -shared -o $@ -D_WORLD_MODULE_ -fPIC
 
 # Dependencies
 ################################################################################
@@ -86,7 +94,7 @@ setcap:
 .PHONY: clean
 clean:
 	@echo "Cleaning build directory..."
-	@rm -f $(OBJ) $(OUT)
+	@rm -f $(OBJ) $(OUT) $(WORLD_OBJ)
 
 .PHONY: veryclean
 veryclean:

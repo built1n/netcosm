@@ -41,6 +41,8 @@ static uint16_t port = DEFAULT_PORT;
 
 static int server_socket;
 
+static char *world_module = "build/worlds/netcosm_default.so";
+
 #define SAVE_INTERVAL 10
 
 /* saves state periodically */
@@ -179,10 +181,28 @@ static void check_userfile(void)
 
 static void load_worldfile(void)
 {
-    extern const struct roomdata_t netcosm_world[];
-    extern const size_t netcosm_world_sz;
+    /* load the world module */
+    void *handle = dlopen(world_module, RTLD_NOW);
+    if(!handle)
+        error("cannot load world module `%s' (%s)", world_module, dlerror());
 
-    extern const char *netcosm_world_name;
+    /* load symbols */
+    size_t *ptr;
+
+    netcosm_verb_classes = dlsym(handle, "netcosm_verb_classes");
+    ptr = dlsym(handle, "netcosm_verb_classes_sz");
+    netcosm_verb_classes_sz = *ptr;
+
+    netcosm_obj_classes = dlsym(handle, "netcosm_obj_classes");
+    ptr = dlsym(handle, "netcosm_obj_classes_sz");
+    netcosm_obj_classes_sz = *ptr;
+
+    netcosm_world = dlsym(handle, "netcosm_world");
+    ptr = dlsym(handle, "netcosm_world_sz");
+    netcosm_world_sz = *ptr;
+
+    char **tmp = dlsym(handle, "netcosm_world_name");
+    netcosm_world_name = *tmp;
 
     if(access(WORLDFILE, F_OK) < 0)
     {
@@ -375,6 +395,21 @@ static void init_signals(void)
         error("sigaction");
 }
 
+static void __attribute__((noreturn)) print_help(char *argv[])
+{
+    debugf("Usage: %s [OPTION]...\n", argv[0]);
+    debugf("NetCosm MUD server\n");
+    debugf("\n");
+    debugf(" -a USER PASS\tautomatic setup with USER/PASS\n");
+    debugf(" -d PREFIX\tcreate and change to PREFIX before writing data files\n");
+    debugf(" -h, -?\t\tshow this help\n");
+    debugf(" -p PORT\tlisten on PORT\n");
+    debugf(" -w MODULE\tuse a different world module\n");
+    exit(0);
+}
+
+static char *data_prefix = NULL;
+
 static void parse_args(int argc, char *argv[])
 {
     for(int i = 1; i < argc; ++i)
@@ -388,20 +423,29 @@ static void parse_args(int argc, char *argv[])
                 switch(c)
                 {
                 case 'h': /* help */
-                    debugf("Usage: %s [-d PREFIX] [-a <username> <password>]\n", argv[0]);
-                    exit(0);
+                case '?':
+                    print_help(argv);
                 case 'a': /* automatic first-run config */
                     autoconfig = true;
+                    if(i + 2 > argc)
+                        print_help(argv);
                     autouser = argv[++i];
                     autopass = argv[++i];
                     break;
                 case 'd': /* set data prefix */
-                    mkdir(argv[++i], 0700);
-                    if(chdir(argv[i]) < 0)
-                    {
-                        debugf("Cannot access data prefix.\n");
-                        exit(0);
-                    }
+                    if(i + 1 > argc)
+                        print_help(argv);
+                    data_prefix = argv[++i];
+                    break;
+                case 'p': /* set port */
+                    if(i + 1 > argc)
+                        print_help(argv);
+                    port = strtol(argv[++i], NULL, 10);
+                    break;
+                case 'w': /* world */
+                    if(i + 1 > argc)
+                        print_help(argv);
+                    world_module = argv[++i];
                     break;
                 default:
                     c = 'h';
@@ -409,8 +453,6 @@ static void parse_args(int argc, char *argv[])
                 }
             }
         }
-        else
-            port = strtol(argv[i], NULL, 10);
     }
 }
 
@@ -431,12 +473,23 @@ int server_main(int argc, char *argv[])
 
     parse_args(argc, argv);
 
+    /* this must be done before any world module data is used */
+    load_worldfile();
+
+    if(data_prefix)
+    {
+        mkdir(data_prefix, 0700);
+        if(chdir(data_prefix) < 0)
+        {
+            debugf("Cannot access data prefix.\n");
+            exit(0);
+        }
+    }
+
     userdb_init(USERFILE);
 
     /* also performs first-time setup: */
     check_userfile();
-
-    load_worldfile();
 
     /* initialize request map */
     reqmap_init();

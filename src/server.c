@@ -41,8 +41,11 @@ static uint16_t port = DEFAULT_PORT;
 
 static int server_socket;
 
+/* for debugging: */
 static char *world_module = "build/worlds/netcosm_default.so";
+static char *module_handle = NULL;
 
+/* save after every X changes to the world state */
 #define SAVE_INTERVAL 10
 
 /* saves state periodically */
@@ -149,6 +152,9 @@ static void __attribute__((noreturn)) server_shutdown(void)
     if(current_user)
         free(current_user);
 
+    if(module_handle)
+        dlclose(module_handle);
+
     /* shut down libev */
     ev_default_destroy();
 
@@ -182,26 +188,26 @@ static void check_userfile(void)
 static void load_worldfile(void)
 {
     /* load the world module */
-    void *handle = dlopen(world_module, RTLD_NOW);
-    if(!handle)
+    module_handle = dlopen(world_module, RTLD_NOW);
+    if(!module_handle)
         error("cannot load world module `%s' (%s)", world_module, dlerror());
 
     /* load symbols */
     size_t *ptr;
 
-    netcosm_verb_classes = dlsym(handle, "netcosm_verb_classes");
-    ptr = dlsym(handle, "netcosm_verb_classes_sz");
+    netcosm_verb_classes = dlsym(module_handle, "netcosm_verb_classes");
+    ptr = dlsym(module_handle, "netcosm_verb_classes_sz");
     netcosm_verb_classes_sz = *ptr;
 
-    netcosm_obj_classes = dlsym(handle, "netcosm_obj_classes");
-    ptr = dlsym(handle, "netcosm_obj_classes_sz");
+    netcosm_obj_classes = dlsym(module_handle, "netcosm_obj_classes");
+    ptr = dlsym(module_handle, "netcosm_obj_classes_sz");
     netcosm_obj_classes_sz = *ptr;
 
-    netcosm_world = dlsym(handle, "netcosm_world");
-    ptr = dlsym(handle, "netcosm_world_sz");
+    netcosm_world = dlsym(module_handle, "netcosm_world");
+    ptr = dlsym(module_handle, "netcosm_world_sz");
     netcosm_world_sz = *ptr;
 
-    char **tmp = dlsym(handle, "netcosm_world_name");
+    char **tmp = dlsym(module_handle, "netcosm_world_name");
     netcosm_world_name = *tmp;
 
     if(access(WORLDFILE, F_OK) < 0)
@@ -325,6 +331,10 @@ static void new_connection_cb(EV_P_ ev_io *w, int revents)
         /* free our data structures */
         hash_free(child_map);
         child_map = NULL;
+
+        if(module_handle)
+            dlclose(module_handle);
+        module_handle = NULL;
 
         /* shut down libev */
         ev_default_destroy();

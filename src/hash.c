@@ -44,7 +44,7 @@ struct hash_map {
     void (*free_key)(void *key);
     void (*free_data)(void *data);
     void* (*dup_data)(void *data);
-    size_t n_entries;
+    size_t n_entries, used_buckets;
 };
 
 #define CHECK_SENTINEL(map) do{if(map && ((struct hash_map*)map)->sentinel!=HASH_SENTINEL)error("hash/multimap mixing");}while(0);
@@ -62,7 +62,7 @@ unsigned hash_djb(const void *ptr)
     return hash;
 }
 
-/* wrappers to suppress warnings */
+/* wrappers to suppress warnings with plain strcmp */
 int compare_strings(const void *a, const void *b)
 {
     return strcmp(a,b);
@@ -76,7 +76,7 @@ int compare_strings_nocase(const void *a, const void *b)
 void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
                            int (*compare_keys)(const void*, const void*))
 {
-    struct hash_map *ret = calloc(sizeof(struct hash_map), 1);
+    struct hash_map *ret = calloc(1, sizeof(struct hash_map));
     if(!sz)
         sz = 1;
     ret->sentinel = HASH_SENTINEL;
@@ -85,6 +85,7 @@ void *hash_init(size_t sz, unsigned (*hash_fn)(const void*),
     ret->hash = hash_fn;
     ret->compare = compare_keys;
     ret->n_entries = 0;
+    ret->used_buckets = 0;
 
     return ret;
 }
@@ -179,6 +180,33 @@ void *hash_iterate(void *map, void **saveptr, void **keyptr)
     return NULL;
 }
 
+/* 75% */
+#define RESIZE_THRESHOLD ((1 << 15) + (1 << 14))
+
+static void hash_internal_insert_new(const void *key, const void *data, struct hash_map *map,
+                                     unsigned hash, struct hash_node *last)
+{
+    /* insert */
+    struct hash_node *new = calloc(sizeof(struct hash_node), 1);
+    new->key = key;
+    new->data = data;
+    new->next = NULL;
+    ++map->n_entries;
+    if(!last)
+    {
+        map->table[hash] = new;
+        ++map->used_buckets;
+
+        /* resize if load factor exceeds threshold */
+        if((map->used_buckets << 16) / (map->table_sz) >= RESIZE_THRESHOLD)
+        {
+            hash_resize(map, map->table_sz * 2);
+        }
+    }
+    else
+        last->next = new;
+}
+
 void hash_overwrite(void *ptr, const void *key, const void *data)
 {
     if(ptr)
@@ -209,15 +237,7 @@ void hash_overwrite(void *ptr, const void *key, const void *data)
         }
 
         /* insert */
-        struct hash_node *new = calloc(sizeof(struct hash_node), 1);
-        new->key = key;
-        new->data = data;
-        new->next = NULL;
-        if(!last)
-            map->table[hash] = new;
-        else
-            last->next = new;
-        ++map->n_entries;
+        hash_internal_insert_new(key, data, map, hash, last);
     }
 }
 
@@ -241,15 +261,8 @@ void *hash_insert(void *ptr, const void *key, const void *data)
         }
 
         /* insert */
-        struct hash_node *new = calloc(sizeof(struct hash_node), 1);
-        new->key = key;
-        new->data = data;
-        new->next = NULL;
-        if(!last)
-            map->table[hash] = new;
-        else
-            last->next = new;
-        ++map->n_entries;
+        hash_internal_insert_new(key, data, map, hash, last);
+
         /* fall through */
     }
     return NULL;
@@ -307,7 +320,10 @@ bool hash_remove(void *ptr, const void *key)
                 if(last)
                     last->next = iter->next;
                 else
+                {
                     map->table[hash] = iter->next;
+                    --map->used_buckets;
+                }
 
                 if(map->free_key)
                     map->free_key((void*)iter->key);
@@ -382,7 +398,10 @@ void hash_del_internal_node(void *ptr, const struct hash_export_node *node)
             if(node->last)
                 ((struct hash_node*)node->last)->next = node->next;
             else
+            {
+                --map->used_buckets;
                 map->table[node->hash] = node->next;
+            }
         }
     }
 }
@@ -431,6 +450,7 @@ void *hash_dup(void *ptr)
         memcpy(ret, map, sizeof(*ret));
 
         ret->table = calloc(ret->table_sz, sizeof(struct hash_node*));
+        ret->used_buckets = 0;
         ret->n_entries = 0;
 
         void *save = NULL;
@@ -460,3 +480,86 @@ void hash_setdupdata_cb(void *ptr, void *(*cb)(void*))
         map->dup_data = cb;
     }
 }
+
+/* naive copy */
+bool hash_resize(void *ptr, size_t new_sz)
+{
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+
+        if(new_sz == map->table_sz)
+            return false;
+
+        struct hash_node **old = map->table;
+
+        size_t old_entries = map->n_entries, old_sz = map->table_sz;
+
+        map->table = calloc(new_sz, sizeof(struct hash_node*));
+        map->table_sz = new_sz;
+        map->n_entries = 0;
+        map->used_buckets = 0;
+
+        for(unsigned i = 0; i < old_sz; ++i)
+        {
+            struct hash_node *iter = old[i], *next;
+            while(iter)
+            {
+                next = iter->next;
+
+                /* bare-bones insert */
+                unsigned hash = map->hash(iter->key) % map->table_sz;
+                iter->next = map->table[hash];
+                map->table[hash] = iter;
+                if(!iter->next)
+                    ++map->used_buckets;
+                ++map->n_entries;
+
+                iter = next;
+            }
+        }
+
+        free(old);
+
+        assert(old_entries == map->n_entries);
+        return true;
+    }
+    else
+        return false;
+}
+
+/* debug dump */
+
+#if 1
+
+void hash_dump(void *ptr)
+{
+    if(ptr)
+    {
+        struct hash_map *map = ptr;
+        CHECK_SENTINEL(map);
+        size_t used_buckets = map->table_sz, n_entries = 0;
+        for(unsigned i = 0; i < map->table_sz; ++i)
+        {
+            printf("%d:", i);
+            struct hash_node *iter = map->table[i];
+            if(!iter)
+                --used_buckets;
+            while(iter)
+            {
+                printf(" --> `%s'", iter->key);
+                ++n_entries;
+                iter = iter->next;
+            }
+            printf("\n");
+        }
+        printf("Load factor: %f\n", (double)used_buckets / map->table_sz);
+        if(n_entries == map->n_entries && used_buckets == map->used_buckets)
+            printf("Map is sane.\n");
+        else
+            printf("Map is NOT SANE!!!\n");
+    }
+}
+
+#endif

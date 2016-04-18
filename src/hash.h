@@ -111,3 +111,5 @@ struct hash_export_node {
 struct hash_export_node hash_get_internal_node(void *ptr, const void *key);
 
 void hash_del_internal_node(void *ptr, const struct hash_export_node *node);
+
+bool hash_resize(void *ptr, size_t new_sz);

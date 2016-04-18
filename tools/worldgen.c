@@ -7,6 +7,10 @@
 /* x and y are horizontal and forward-back axes, respectively */
 /* z is the vertical axis */
 
+#define MAX_X 1000
+#define MAX_Y 1000
+#define MAX_Z 1
+
 struct direction_info_t {
     enum direction_t dir;
     int off_x, off_y, off_z;
@@ -28,9 +32,9 @@ int main()
     printf("#include <world_api.h>\n");
     printf("const struct roomdata_t netcosm_world[] = {\n");
 
-    for(int x = 0; x < WORLD_DIM; ++x)
-        for(int y = 0; y < WORLD_DIM; ++y)
-            for(int z = 0; z < WORLD_DIM; ++z)
+    for(int x = 0; x < MAX_X; ++x)
+        for(int y = 0; y < MAX_Y; ++y)
+            for(int z = 0; z < MAX_Z; ++z)
             {
                 printf("{\n");
                 printf("\"room_%d_%d_%d\",\n", x, y, z);
@@ -44,9 +48,9 @@ int main()
                         new_y = y + dirs[i].off_y,
                         new_z = z + dirs[i].off_z;
 
-                    if(new_x < 0 || new_x >= WORLD_DIM ||
-                       new_y < 0 || new_y >= WORLD_DIM ||
-                       new_z < 0 || new_z >= WORLD_DIM)
+                    if(new_x < 0 || new_x >= MAX_X ||
+                       new_y < 0 || new_y >= MAX_Y ||
+                       new_z < 0 || new_z >= MAX_Z)
                         asprintf(adj + i, "NULL");
                     else
                         asprintf(adj + i, "\"room_%d_%d_%d\"",

@@ -607,11 +607,6 @@ static void type_exec(struct verb_t *verb, char *args, user_t *user)
     }
 }
 
-static void climb_exec(struct verb_t *verb, char *args, user_t *user)
-{
-
-}
-
 /* verb classes */
 
 const struct verb_class_t netcosm_verb_classes[] = {
@@ -634,3 +629,14 @@ const struct verb_class_t netcosm_verb_classes[] = {
 };
 
 const size_t netcosm_verb_classes_sz = ARRAYLEN(netcosm_verb_classes);
+
+/* simulation callback */
+void netcosm_world_simulation_cb(void)
+{
+    /* do nothing */
+    //printf("callback\n");
+    return;
+}
+
+/* 100 ms */
+unsigned netcosm_world_simulation_interval = 100;

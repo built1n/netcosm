@@ -46,7 +46,7 @@ LDFLAGS = -lev -lcrypto -ldl
 
 HEADERS = src/*.h export/include/*.h
 
-DEPS = $(patsubst %.c,$(BUILDDIR)/%.d,$(SRC))
+DEPS = $(patsubst %.c,$(BUILDDIR)/src/%.d,$(SRC)) $(patsubst %.c,$(BUILDDIR)/worlds/%.d,$(WORLD_SRC))
 
 # Main targets
 ################################################################################
@@ -79,7 +79,7 @@ $(BUILDDIR)/%.so: %.c $(BUILDDIR)/%.d Makefile
 .PRECIOUS: $(BUILDDIR)/%.d
 $(BUILDDIR)/%.d: %.c
 	@mkdir -p `dirname $@`
-	@$(CC) $(CCFLAGS) -MF"$@" -MG -MM -MP -MT"$@" -MT"$(<:.c=.o)" "$<"
+	@$(CC) $(CFLAGS) -MF"$@" -MG -MM -MP -MT"$@" -MT"$(BUILDDIR)/$(<:.c=.o)" "$<"
 
 -include $(DEPS)
 

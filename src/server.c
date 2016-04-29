@@ -42,7 +42,7 @@ static uint16_t port = DEFAULT_PORT;
 static int server_socket;
 
 /* for debugging: */
-static char *world_module = "build/worlds/netcosm_default.so";
+static char *world_module = "build/worlds/dunnet.so";
 static char *module_handle = NULL;
 
 /* save after every X changes to the world state */
@@ -188,27 +188,48 @@ static void check_userfile(void)
 static void load_worldfile(void)
 {
     /* load the world module */
+
     module_handle = dlopen(world_module, RTLD_NOW);
     if(!module_handle)
         error("cannot load world module `%s' (%s)", world_module, dlerror());
 
     /* load symbols */
-    size_t *ptr;
+    {
+        size_t *ptr;
 
-    netcosm_verb_classes = dlsym(module_handle, "netcosm_verb_classes");
-    ptr = dlsym(module_handle, "netcosm_verb_classes_sz");
-    netcosm_verb_classes_sz = *ptr;
+        netcosm_verb_classes = dlsym(module_handle, "netcosm_verb_classes");
+        ptr = dlsym(module_handle, "netcosm_verb_classes_sz");
+        netcosm_verb_classes_sz = *ptr;
 
-    netcosm_obj_classes = dlsym(module_handle, "netcosm_obj_classes");
-    ptr = dlsym(module_handle, "netcosm_obj_classes_sz");
-    netcosm_obj_classes_sz = *ptr;
+        netcosm_obj_classes = dlsym(module_handle, "netcosm_obj_classes");
+        ptr = dlsym(module_handle, "netcosm_obj_classes_sz");
+        netcosm_obj_classes_sz = *ptr;
 
-    netcosm_world = dlsym(module_handle, "netcosm_world");
-    ptr = dlsym(module_handle, "netcosm_world_sz");
-    netcosm_world_sz = *ptr;
-
-    char **tmp = dlsym(module_handle, "netcosm_world_name");
-    netcosm_world_name = *tmp;
+        netcosm_world = dlsym(module_handle, "netcosm_world");
+        ptr = dlsym(module_handle, "netcosm_world_sz");
+        netcosm_world_sz = *ptr;
+    }
+    {
+        char **ptr = dlsym(module_handle, "netcosm_world_name");
+        netcosm_world_name = *ptr;
+    }
+    {
+        void *ptr;
+        ptr = dlsym(module_handle, "netcosm_world_simulation_cb");
+        netcosm_world_simulation_cb = ptr;
+    }
+    {
+        unsigned *ptr;
+        ptr = dlsym(module_handle, "netcosm_world_simulation_interval");
+        if(ptr)
+            netcosm_world_simulation_interval = *ptr;
+        else
+        {
+            netcosm_world_simulation_interval = 0;
+            if(netcosm_world_simulation_cb)
+                error("have simulation callback, but no interval specified");
+        }
+    }
 
     if(access(WORLDFILE, F_OK) < 0)
     {
@@ -482,6 +503,12 @@ int server_main(int argc, char *argv[])
     check_libs();
 
     parse_args(argc, argv);
+
+    /* load default if none specified */
+    if(!world_module)
+    {
+        error("no world module specified");
+    }
 
     /* this must be done before any world module data is used */
     load_worldfile();

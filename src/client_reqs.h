@@ -26,7 +26,7 @@
 
 enum room_id;
 
-enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN } reqdata_type;
+enum reqdata_typespec { TYPE_NONE = 0, TYPE_USERDATA, TYPE_BOOLEAN };
 
 union reqdata_t {
     struct userdata_t userdata;

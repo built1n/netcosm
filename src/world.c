@@ -35,6 +35,10 @@ size_t netcosm_obj_classes_sz;
 const struct roomdata_t *netcosm_world;
 size_t netcosm_world_sz;
 
+/* simulation callback */
+void (*netcosm_world_simulation_cb)(void) = NULL;
+unsigned netcosm_world_simulation_interval = 0;
+
 const char *netcosm_world_name;
 
 /* processed world data */
@@ -157,6 +161,16 @@ void world_save(const char *fname)
     close(fd);
 }
 
+static ev_timer *sim_timer = NULL;
+
+static void sim_cb(EV_P_ ev_timer *w, int revents)
+{
+    (void) EV_A;
+    (void) w;
+    (void) revents;
+    netcosm_world_simulation_cb();
+}
+
 void world_free(void)
 {
     if(world)
@@ -173,6 +187,20 @@ void world_free(void)
 
         free(world);
         world = NULL;
+    }
+    if(sim_timer)
+        free(sim_timer);
+}
+
+static void start_sim_callback(void)
+{
+    /* start callback */
+    if(netcosm_world_simulation_cb && netcosm_world_simulation_interval)
+    {
+        sim_timer = calloc(1, sizeof(ev_timer));
+        ev_timer_init(sim_timer, sim_cb, netcosm_world_simulation_interval/1000.0,
+                      netcosm_world_simulation_interval/1000.0);
+        ev_timer_start(EV_DEFAULT_ sim_timer);
     }
 }
 
@@ -208,8 +236,8 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     world_name = read_string(fd);
     if(strcmp(name, world_name))
     {
-        free(world_name);
         debugf("Incompatible world state (%s %s).\n", name, world_name);
+        free(world_name);
         return false;
     }
 
@@ -277,6 +305,9 @@ bool world_load(const char *fname, const struct roomdata_t *data, size_t data_sz
     }
 
     close(fd);
+
+    start_sim_callback();
+
     return true;
 }
 
@@ -385,6 +416,8 @@ void world_init(const struct roomdata_t *data, size_t sz, const char *name)
     }
 
     hash_free(dir_map);
+
+    start_sim_callback();
 }
 
 static void *verb_map = NULL;

@@ -44,6 +44,12 @@ Then connect to the server and start playing:
 
     telnet localhost
 
+#### Stunnel
+
+Sample stunnel configuration files for both clients and servers are
+provided. The server configuration tunnels from TCP port 992 to local
+port 1234, and the client vice-versa.
+
 ## Todo List
 
 * Game scripting

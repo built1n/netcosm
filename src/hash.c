@@ -200,6 +200,7 @@ static void hash_internal_insert_new(const void *key, const void *data, struct h
         /* resize if load factor exceeds threshold */
         if((map->used_buckets << 16) / (map->table_sz) >= RESIZE_THRESHOLD)
         {
+            //printf("resizing map of %zu elements...\n", map->used_buckets);
             hash_resize(map, map->table_sz * 2);
         }
     }
@@ -548,7 +549,7 @@ void hash_dump(void *ptr)
                 --used_buckets;
             while(iter)
             {
-                printf(" --> `%s'", iter->key);
+                printf(" --> `%s'", (char*)iter->key);
                 ++n_entries;
                 iter = iter->next;
             }

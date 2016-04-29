@@ -41,10 +41,15 @@ extern size_t netcosm_obj_classes_sz;
 extern const struct roomdata_t *netcosm_world;
 extern size_t netcosm_world_sz;
 
+/* simulation callback */
+extern void (*netcosm_world_simulation_cb)(void);
+extern unsigned netcosm_world_simulation_interval;
+
 extern const char *netcosm_world_name;
 #endif
 
-/*** loads the world into RAM for the first time, resets the game state ***/
+/* loads the world into RAM for the first time, resets the game
+ * state */
 void world_init(const struct roomdata_t *data, size_t sz, const char *name);
 
 void world_save(const char *fname);

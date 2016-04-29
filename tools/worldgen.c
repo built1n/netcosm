@@ -7,8 +7,8 @@
 /* x and y are horizontal and forward-back axes, respectively */
 /* z is the vertical axis */
 
-#define MAX_X 1000
-#define MAX_Y 1000
+#define MAX_X 100
+#define MAX_Y 100
 #define MAX_Z 1
 
 struct direction_info_t {

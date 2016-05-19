@@ -39,12 +39,16 @@ struct userdata_t {
     time_t last_login;
 
     void *objects; /* multihash of object names -> objects */
+
+    /* for use by world module */
+    void *userdata;
 };
 
 /* call before using anything else */
 void userdb_init(const char *dbfile);
 
 /* looks up a username in the DB, returns NULL upon failure */
+/* changes made to the returned structure will persist */
 struct userdata_t *userdb_lookup(const char *username);
 
 bool userdb_remove(const char *username);

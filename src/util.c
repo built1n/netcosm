@@ -173,6 +173,20 @@ void write_size(int fd, size_t b)
         error("write failed");
 }
 
+int read_int(int fd)
+{
+    int ret;
+    if(read(fd, &ret, sizeof(ret)) != sizeof(ret))
+        error("unexpected EOF");
+    return ret;
+}
+
+void write_int(int fd, int b)
+{
+    if(write(fd, &b, sizeof(b)) != sizeof(b))
+        error("write failed");
+}
+
 bool is_vowel(char c)
 {
     switch(tolower(c))

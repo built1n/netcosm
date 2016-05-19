@@ -26,6 +26,7 @@
 #include "server.h"
 #include "server_reqs.h"
 #include "userdb.h"
+#include "world.h"
 
 static void *map = NULL;
 static char *db_file = NULL;
@@ -101,6 +102,10 @@ void userdb_init(const char *file)
                 }
             }
 
+            /* now we read in the world module's data, if possible */
+            if(netcosm_read_userdata_cb)
+                data->userdata = netcosm_read_userdata_cb(fd);
+
             hash_insert(map, data->username, data);
         }
 
@@ -124,8 +129,10 @@ bool userdb_write(const char *file)
         if(!user)
             break;
 
+        /* dump structure */
         write(fd, user, sizeof(*user));
 
+        /* now go back and write what the pointers are pointing at */
         size_t n_objects;
         if(user->objects)
             n_objects = obj_count_noalias(user->objects);
@@ -157,6 +164,12 @@ bool userdb_write(const char *file)
                     iter = iter->next;
                 }
             }
+        }
+
+        /* write world module's data, if possible */
+        if(netcosm_write_userdata_cb)
+        {
+            netcosm_write_userdata_cb(fd, user->userdata);
         }
     }
     close(fd);

@@ -139,6 +139,10 @@ number.
 
 * Many bugfixes
 
+##### 0.5.2
+
+* Support for monotonic world simulation callbacks
+
 ### Roadmap
 
 #### 0.6.0

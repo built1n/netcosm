@@ -55,11 +55,6 @@
 #include <time.h>
 #include <unistd.h>
 
-/* convenience macros */
-#define ARRAYLEN(x) (sizeof(x)/sizeof(x[0]))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-#define MIN(a,b) (((a)<(b))?(a):(b))
-
 /* global constants */
 #define USERFILE "users.dat"
 #define WORLDFILE "world.dat"

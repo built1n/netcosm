@@ -56,7 +56,7 @@ bool poll_requests(void)
         /* parent closed pipe */
         if(!packetlen)
         {
-            debugf("master process died\n");
+            debugf("master process died, dropping client.\n");
             exit(0);
         }
 
@@ -66,6 +66,11 @@ bool poll_requests(void)
 
         switch(cmd)
         {
+        case REQ_RAWMODE:
+        {
+            child_rawmode = !child_rawmode;
+            break;
+        }
         case REQ_BCASTMSG:
         {
             out((char*)data, datalen);

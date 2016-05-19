@@ -25,6 +25,8 @@
 #include "userdb.h"
 #include "world.h"
 
+/* these do not perform hook checking on the requested action, that is
+ * the responsibility of the caller */
 bool room_user_add(room_id id, struct child_data *child)
 {
     struct room_t *room = room_get(id);
@@ -58,6 +60,16 @@ bool room_user_del(room_id id, struct child_data *child)
     }
     else
         return false;
+}
+
+/* ignores hooks */
+void room_user_teleport(struct child_data *child, room_id id)
+{
+    if(child->room != id)
+    {
+        room_user_del(child->room, child);
+        room_user_add(id, child);
+    }
 }
 
 void room_free(struct room_t *room)
@@ -99,7 +111,7 @@ bool room_obj_add(room_id room, struct object_t *obj)
     return status;
 }
 
-bool room_obj_add_alias(room_id room, struct object_t *obj, char *alias)
+bool room_obj_add_alias(room_id room, struct object_t *obj, const char *alias)
 {
     /* the primary name must be added */
     if(!room_obj_get(room, obj->name))

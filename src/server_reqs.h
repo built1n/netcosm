@@ -50,7 +50,7 @@
 #define REQ_DROP              22 /* server: drop user object if allowed */
 #define REQ_LISTUSERS         23 /* server: list users in USERFILE */
 #define REQ_EXECVERB          24 /* server: execute a verb with its arguments */
-#define REQ_RAWMODE           25 /* child: toggle the child's processing of commands and instead sending input directly to master */
+#define REQ_RAWMODE           25 /* child: toggle the child's processing of commands and instead send input directly to master */
 
 /* child states, sent as an int to the master */
 #define STATE_INIT      0 /* initial state */
@@ -66,3 +66,9 @@ void reqmap_init(void);
 void reqmap_free(void);
 
 void send_msg(user_t *child, const char *fmt, ...) __attribute__((format(printf,2,3)));
+
+/* toggle the child into "raw mode": all commands typed by the
+ * connected client will be send to the world module;
+ * if the child is already in raw mode the callback is ignored */
+
+void child_toggle_rawmode(user_t *child, void (*cb)(user_t*, char *data, size_t len));

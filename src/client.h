@@ -23,6 +23,7 @@
 
 extern int client_fd, to_parent, from_parent;
 extern bool are_admin;
+extern bool child_rawmode;
 
 /* call from child process ONLY */
 void send_master(unsigned char cmd, const void *data, size_t sz);

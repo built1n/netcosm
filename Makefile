@@ -38,7 +38,7 @@ INCLUDES = -I src/ -I export/include/
 WARNFLAGS = -Wall -Wextra -Wshadow -fno-strict-aliasing
 
 OPTFLAGS = -O2
-DEBUGFLAGS = -g -fstack-protector
+DEBUGFLAGS = -g
 
 CFLAGS = $(OPTFLAGS) $(DEBUGFLAGS) $(WARNFLAGS) -std=c99 $(INCLUDES)
 

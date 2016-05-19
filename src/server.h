@@ -24,6 +24,7 @@
 enum room_id;
 
 /* everything the server needs to manage its children */
+/* aliased as user_t */
 struct child_data {
     pid_t    pid;
 
@@ -39,6 +40,9 @@ struct child_data {
     /* libev watchers */
     ev_io    *io_watcher;
     ev_child *sigchld_watcher;
+
+    /* raw mode callback (NULL if none, set by world module) */
+    void     (*raw_mode_cb)(struct child_data*, char *data, size_t len);
 
     /* remote IP */
     struct in_addr addr;

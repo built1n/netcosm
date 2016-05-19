@@ -26,18 +26,29 @@
 #include "world.h"
 
 /* sends a single packet to a child, mostly reliable */
+
+/* splits REQ_BCASTMSG message into multiple packets if data length
+ * exceeds MSG_MAX, however, other requests will not be split and will
+ * cause a failed assertion */
+
 static void send_packet(struct child_data *child, unsigned char cmd,
                         const void *data, size_t datalen)
 {
-    assert(datalen < MSG_MAX);
+    assert(datalen < MSG_MAX || cmd == REQ_BCASTMSG);
     unsigned char pkt[MSG_MAX];
     pkt[0] = cmd;
 
-    //if((data?datalen:0) + 1 > MSG_MAX && cmd == REQ_BCASTMSG)
-    //{
-    //    /* TODO: split long messages */
-    //    ;
-    //}
+    if(cmd == REQ_BCASTMSG && (data?datalen:0) + 1 > MSG_MAX)
+    {
+        /* split long messages */
+        const char *ptr = data, *stop = (const char*)data + datalen;
+        while(ptr < stop)
+        {
+            send_packet(child, cmd, ptr, MIN(stop - ptr, MSG_MAX - 1));
+            ptr += MSG_MAX - 1;
+        }
+        return;
+    }
 
     if(data && datalen)
         memcpy(pkt + 1, data, datalen);
@@ -47,6 +58,19 @@ tryagain:
         /* write can fail, so we try again */
         if(errno == EAGAIN)
             goto tryagain;
+    }
+}
+
+void child_toggle_rawmode(struct child_data *child, void (*cb)(user_t*, char *data, size_t len))
+{
+    if(!are_child)
+    {
+        send_packet(child, REQ_RAWMODE, NULL, 0);
+        /* this pointer also indicates whether raw mode is on */
+        if(!child->raw_mode_cb)
+            child->raw_mode_cb = cb;
+        else
+            child->raw_mode_cb = NULL;
     }
 }
 
@@ -495,6 +519,14 @@ static void req_listusers(unsigned char *data, size_t datalen, struct child_data
 static void req_execverb(unsigned char *data, size_t datalen, struct child_data *sender)
 {
     (void) datalen;
+
+    /* if the child is in raw mode, pass the data to the world module */
+    if(sender->raw_mode_cb)
+    {
+        sender->raw_mode_cb(sender, (char*)data, datalen);
+        return;
+    }
+
     /* first look for a room-local verb */
     char *save;
     char *tok = strtok_r((char*)data, " \t", &save);

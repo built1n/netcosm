@@ -69,15 +69,19 @@ struct room_t {
 
     /* hash maps */
     void *objects; /* multimap of object name -> object */
-    void *verbs;
+    void *verbs; /* name -> verb_t */
     void *users; /* username -> child_data */
 
     void *userdata;
 };
 
 /* room/world */
+
+/* none of these care about room hooks, which are the caller's
+ * responsibility */
 bool room_user_add(room_id id, struct child_data *child);
 bool room_user_del(room_id id, struct child_data *child);
+void room_user_teleport(struct child_data *child, room_id id);
 
 /* On the first call, room should be a valid room id, and *save should
  * point to a void pointer. On subsequent calls, room should be
@@ -92,10 +96,9 @@ const struct multimap_list *room_obj_iterate(room_id room, void **save, size_t *
  */
 bool room_obj_add(room_id room, struct object_t *obj);
 
-bool room_obj_add_alias(room_id room, struct object_t *obj, char *alias);
+bool room_obj_add_alias(room_id room, struct object_t *obj, const char *alias);
 
 bool room_obj_del(room_id room, const char *name);
-bool room_obj_del_alias(room_id room, struct object_t *obj, const char *alias);
 bool room_obj_del_by_ptr(room_id room, struct object_t *obj);
 
 const struct multimap_list *room_obj_get(room_id room, const char *obj);

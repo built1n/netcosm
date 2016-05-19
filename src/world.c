@@ -39,6 +39,9 @@ size_t netcosm_world_sz;
 void (*netcosm_world_simulation_cb)(void) = NULL;
 unsigned netcosm_world_simulation_interval = 0;
 
+void (*netcosm_write_userdata_cb)(int fd, void *ptr) = NULL;
+void *(*netcosm_read_userdata_cb)(int fd) = NULL;
+
 const char *netcosm_world_name;
 
 /* processed world data */
@@ -188,8 +191,6 @@ void world_free(void)
         free(world);
         world = NULL;
     }
-    if(sim_timer)
-        free(sim_timer);
 }
 
 static void start_sim_callback(void)
@@ -438,6 +439,12 @@ bool world_verb_add(struct verb_t *verb)
     init_map();
     //debugf("Added global verb %s\n", verb->name);
     return !hash_insert(verb_map, verb->name, verb);
+}
+
+bool world_verb_del(struct verb_t *verb)
+{
+    init_map();
+    return hash_remove(verb_map, verb->name);
 }
 
 void *world_verb_map(void)

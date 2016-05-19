@@ -2,151 +2,165 @@
 
 /* implements dunnet in NetCosm */
 
+/* user data structure: used for tracking dunnet-specific user
+ * attributes */
+
+struct dunnet_user {
+    enum { NO_CONSOLE = 0, POKEY_LOGIN, POKEY_SHELL, POKEY_FTP, GAMMA_FTP } console_state;
+    union {
+        struct {
+            bool prompt_pass;
+            bool correct_user;
+            int fails;
+        } pokey_login;
+    } state_data;
+};
+
 /************ ROOM DEFINITIONS ************/
 
 static void deadend_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic");
+    struct object_t *new = nc->obj_new("/generic");
     new->name = strdup("shovel");
     new->userdata = strdup("It is a normal shovel with a price tag attached that says $19.99.");
 
-    room_obj_add(id, new);
+    nc->room_obj_add(id, new);
 
-    new = obj_new("/generic/notake");
+    new = nc->obj_new("/generic/notake");
     new->name = strdup("trees");
     new->userdata = strdup("They are palm trees with a bountiful supply of coconuts in them.");
     new->hidden = true;
 
-    room_obj_add(id, new);
-    room_obj_add_alias(id, new, "tree");
-    room_obj_add_alias(id, new, "palm");
-    room_obj_add_alias(id, new, "palm tree");
+    nc->room_obj_add(id, new);
+    nc->room_obj_add_alias(id, new, "tree");
+    nc->room_obj_add_alias(id, new, "palm");
+    nc->room_obj_add_alias(id, new, "palm tree");
 
     /* add global verbs */
-    struct verb_t *verb = verb_new("dig");
+    struct verb_t *verb = nc->verb_new("dig");
     verb->name = strdup("dig");
-    world_verb_add(verb);
+    nc->world_verb_add(verb);
 
-    verb = verb_new("put");
+    verb = nc->verb_new("put");
     verb->name = strdup("put");
-    world_verb_add(verb);
+    nc->world_verb_add(verb);
 
-    verb = verb_new("eat");
+    verb = nc->verb_new("eat");
     verb->name = strdup("eat");
-    world_verb_add(verb);
+    nc->world_verb_add(verb);
 
-    verb = verb_new("shake");
+    verb = nc->verb_new("shake");
     verb->name = strdup("shake");
-    world_verb_add(verb);
+    nc->world_verb_add(verb);
 
-    verb = verb_new("type");
+    verb = nc->verb_new("type");
     verb->name = strdup("type");
-    world_verb_add(verb);
+    nc->world_verb_add(verb);
 }
 
 static void ew_road_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic/notake");
+    struct object_t *new = nc->obj_new("/generic/notake");
     new->name = strdup("large boulder");
     new->userdata = strdup("It is just a boulder.  It cannot be moved.");
-    room_obj_add(id, new);
-    room_obj_add_alias(id, new, "boulder");
-    room_obj_add_alias(id, new, "rock");
+    nc->room_obj_add(id, new);
+    nc->room_obj_add_alias(id, new, "boulder");
+    nc->room_obj_add_alias(id, new, "rock");
 }
 
 static void fork_init(room_id id)
 {
-    room_get(id)->userdata = calloc(1, sizeof(bool));
+    nc->room_get(id)->userdata = calloc(1, sizeof(bool));
     /* flag for whether the user has already dug */
-    bool *b = room_get(id)->userdata;
+    bool *b = nc->room_get(id)->userdata;
     *b = false;
 }
 
 static void bool_ser(room_id id, int fd)
 {
-    bool *b = room_get(id)->userdata;
-    write_bool(fd, *b);
+    bool *b = nc->room_get(id)->userdata;
+    nc->write_bool(fd, *b);
 }
 
 static void bool_deser(room_id id, int fd)
 {
     bool *b = calloc(1, sizeof(bool));
-    *b = read_bool(fd);
-    room_get(id)->userdata = b;
+    *b = nc->read_bool(fd);
+    nc->room_get(id)->userdata = b;
 }
 
 static void bool_destroy(room_id id)
 {
-    free(room_get(id)->userdata);
+    free(nc->room_get(id)->userdata);
 }
 
 static void senw_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic/dunnet/food");
+    struct object_t *new = nc->obj_new("/generic/dunnet/food");
     new->name = strdup("some food");
     new->userdata = strdup("It looks like some kind of meat.  Smells pretty bad.");
     new->default_article = false;
-    room_obj_add(id, new);
-    room_obj_add_alias(id, new, "food");
-    room_obj_add_alias(id, new, "meat");
+    nc->room_obj_add(id, new);
+    nc->room_obj_add_alias(id, new, "food");
+    nc->room_obj_add_alias(id, new, "meat");
 }
 
 static void hangout_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic/notake");
+    struct object_t *new = nc->obj_new("/generic/notake");
     new->name = strdup("ferocious bear");
     new->userdata = strdup("It looks like a grizzly to me.");
-    room_obj_add(id, new);
-    room_obj_add_alias(id, new, "bear");
+    nc->room_obj_add(id, new);
+    nc->room_obj_add_alias(id, new, "bear");
 }
 
 static void hidden_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic");
+    struct object_t *new = nc->obj_new("/generic");
     new->name = strdup("emerald bracelet");
     new->userdata = strdup("I see nothing special about that.");
-    room_obj_add(id, new);
-    room_obj_add_alias(id, new, "bracelet");
+    nc->room_obj_add(id, new);
+    nc->room_obj_add_alias(id, new, "bracelet");
 }
 
 static bool building_enter(room_id id, user_t *user)
 {
     (void) id;
-    if(multimap_lookup(userdb_lookup(user->user)->objects, "shiny brass key", NULL))
+    if(nc->multimap_lookup(userdb_lookup(user->user)->objects, "shiny brass key", NULL))
         return true;
     else
     {
-        send_msg(user, "You don't have a key that can open this door.\n");
+        nc->send_msg(user, "You don't have a key that can open this door.\n");
         return false;
     }
 }
 
 static void mailroom_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic/notake");
+    struct object_t *new = nc->obj_new("/generic/notake");
     new->name = strdup("bins");
     new->hidden = true;
 
     /* insert IAC NOP to prevent the extra whitespace from being dropped */
     new->userdata = strdup("All of the bins are empty.  Looking closely you can see that there are names written at the bottom of each bin, but most of them are faded away so that you cannot read them.  You can only make out three names:\n\377\361                   Jeffrey Collier\n\377\361                   Robert Toukmond\n\377\361                   Thomas Stock\n");
-    room_obj_add(id, new);
-    room_obj_add_alias(id, new, "mail bins");
+    nc->room_obj_add(id, new);
+    nc->room_obj_add_alias(id, new, "mail bins");
 }
 
 static void computer_room_init(room_id id)
 {
-    struct object_t *new = obj_new("/generic/notake");
+    struct object_t *new = nc->obj_new("/generic/notake");
     new->name = strdup("computer");
     new->userdata = strdup("I see nothing special about that.");
     new->hidden = true;
 
-    room_obj_add(id, new);
-    room_obj_add_alias(id, new, "vax");
-    room_obj_add_alias(id, new, "pokey");
+    nc->room_obj_add(id, new);
+    nc->room_obj_add_alias(id, new, "vax");
+    nc->room_obj_add_alias(id, new, "pokey");
 
     /* flag for whether computer is active */
-    room_get(id)->userdata = malloc(sizeof(bool));
-    bool *b = room_get(id)->userdata;
+    nc->room_get(id)->userdata = malloc(sizeof(bool));
+    bool *b = nc->room_get(id)->userdata;
     *b = false;
 }
 
@@ -334,23 +348,23 @@ static bool no_take(struct object_t *obj, user_t *user)
 
 static bool food_drop(struct object_t *obj, user_t *user)
 {
-    if(room_obj_get(user->room, "bear"))
+    if(nc->room_obj_get(user->room, "bear"))
     {
-        send_msg(user, "The bear takes the food and runs away with it. He left something behind.\n");
+        nc->send_msg(user, "The bear takes the food and runs away with it. He left something behind.\n");
 
         room_obj_del(user->room, "ferocious bear");
         room_obj_del_by_ptr(user->room, obj);
 
-        struct object_t *new = obj_new("/generic");
+        struct object_t *new = nc->obj_new("/generic");
         new->hidden = false;
 
         new->name = strdup("shiny brass key");
         new->userdata = strdup("I see nothing special about that.");
 
-        room_obj_add(user->room, new);
-        room_obj_add_alias(user->room, new, "key");
-        room_obj_add_alias(user->room, new, "shiny key");
-        room_obj_add_alias(user->room, new, "brass key");
+        nc->room_obj_add(user->room, new);
+        nc->room_obj_add_alias(user->room, new, "key");
+        nc->room_obj_add_alias(user->room, new, "shiny key");
+        nc->room_obj_add_alias(user->room, new, "brass key");
     }
 
     return true;
@@ -402,26 +416,26 @@ static void dig_exec(struct verb_t *verb, char *args, user_t *user)
 {
     (void) verb;
     (void) args;
-    if(!multimap_lookup(userdb_lookup(user->user)->objects, "shovel", NULL))
+    if(!nc->multimap_lookup(userdb_lookup(user->user)->objects, "shovel", NULL))
     {
-        send_msg(user, "You have nothing with which to dig.\n");
+        nc->send_msg(user, "You have nothing with which to dig.\n");
         return;
     }
 
-    if(!strcmp(room_get(user->room)->data.name, "Fork"))
+    if(!strcmp(nc->room_get(user->room)->data.name, "Fork"))
     {
-        bool *b = room_get(user->room)->userdata;
+        bool *b = nc->room_get(user->room)->userdata;
         if(!*b)
         {
             *b = true;
-            struct object_t *new = obj_new("/generic");
+            struct object_t *new = nc->obj_new("/generic");
             new->name = strdup("CPU card");
             new->userdata = strdup("The CPU board has a VAX chip on it.  It seems to have 2 Megabytes of RAM onboard.");
-            room_obj_add(user->room, new);
-            room_obj_add_alias(user->room, new, "cpu");
-            room_obj_add_alias(user->room, new, "chip");
-            room_obj_add_alias(user->room, new, "card");
-            send_msg(user, "I think you found something.\n");
+            nc->room_obj_add(user->room, new);
+            nc->room_obj_add_alias(user->room, new, "cpu");
+            nc->room_obj_add_alias(user->room, new, "chip");
+            nc->room_obj_add_alias(user->room, new, "card");
+            nc->send_msg(user, "I think you found something.\n");
         }
         else
         {
@@ -429,12 +443,12 @@ static void dig_exec(struct verb_t *verb, char *args, user_t *user)
         }
     }
     else
-        send_msg(user, "Digging here reveals nothing.\n");
+        nc->send_msg(user, "Digging here reveals nothing.\n");
 
     return;
 
 nothing:
-    send_msg(user, "Digging here reveals nothing.\n");
+    nc->send_msg(user, "Digging here reveals nothing.\n");
 }
 
 static void put_exec(struct verb_t *verb, char *args, user_t *user)
@@ -445,16 +459,16 @@ static void put_exec(struct verb_t *verb, char *args, user_t *user)
 
     if(!obj_name)
     {
-        send_msg(user, "You must supply an object\n");
+        nc->send_msg(user, "You must supply an object\n");
         return;
     }
 
     args = NULL;
-    const struct multimap_list *list = multimap_lookup(userdb_lookup(user->user)->objects,
+    const struct multimap_list *list = nc->multimap_lookup(userdb_lookup(user->user)->objects,
                                                        obj_name, NULL);
     if(!list)
     {
-        send_msg(user, "You don't have that.\n");
+        nc->send_msg(user, "You don't have that.\n");
         return;
     }
 
@@ -468,34 +482,34 @@ static void put_exec(struct verb_t *verb, char *args, user_t *user)
 
     if(!ind_obj_name)
     {
-        send_msg(user, "You must supply an indirect object.\n");
+        nc->send_msg(user, "You must supply an indirect object.\n");
         return;
     }
 
-    list = room_obj_get(user->room, ind_obj_name);
+    list = nc->room_obj_get(user->room, ind_obj_name);
 
     if(!list)
     {
-        send_msg(user, "I don't know what that indirect object is.\n");
+        nc->send_msg(user, "I don't know what that indirect object is.\n");
         return;
     }
 
     struct object_t *ind_obj = list->val;
 
     /* now execute the verb */
-    if(!strcmp(obj->name, "CPU card") && !strcmp(ind_obj->name, "computer") && user->room == room_get_id("computer_room"))
+    if(!strcmp(obj->name, "CPU card") && !strcmp(ind_obj->name, "computer") && user->room == nc->room_get_id("computer_room"))
     {
-        userdb_del_obj_by_ptr(user->user, obj);
-        send_msg(user, "As you put the CPU board in the computer, it immediately springs to life.  The lights start flashing, and the fans seem to startup.\n");
-        bool *b = room_get(user->room)->userdata;
+        nc->userdb_del_obj_by_ptr(user->user, obj);
+        nc->send_msg(user, "As you put the CPU board in the computer, it immediately springs to life.  The lights start flashing, and the fans seem to startup.\n");
+        bool *b = nc->room_get(user->room)->userdata;
         *b = true;
 
-        free(room_get(user->room)->data.desc);
-        room_get(user->room)->data.desc = strdup("You are in a computer room.  It seems like most of the equipment has been removed.  There is a VAX 11/780 in front of you, however, with one of the cabinets wide open.  A sign on the front of the machine says: This VAX is named 'pokey'.  To type on the console, use the 'type' command.  The exit is to the east.\nThe panel lights are flashing in a seemingly organized pattern.");
+        free(nc->room_get(user->room)->data.desc);
+        nc->room_get(user->room)->data.desc = strdup("You are in a computer room.  It seems like most of the equipment has been removed.  There is a VAX 11/780 in front of you, however, with one of the cabinets wide open.  A sign on the front of the machine says: This VAX is named 'pokey'.  To type on the console, use the 'type' command.  The exit is to the east.\nThe panel lights are flashing in a seemingly organized pattern.");
     }
     else
     {
-        send_msg(user, "I don't know how to combine those objects.  Perhaps you should just try dropping it.\n");
+        nc->send_msg(user, "I don't know how to combine those objects.  Perhaps you should just try dropping it.\n");
     }
 }
 
@@ -506,19 +520,19 @@ static void eat_exec(struct verb_t *verb, char *args, user_t *user)
     char *obj_name = strtok_r(args, WSPACE, &save);
     if(!obj_name)
     {
-        send_msg(user, "You must supply an object.\n");
+        nc->send_msg(user, "You must supply an object.\n");
         return;
     }
 
     size_t n_objs;
-    const struct multimap_list *list = multimap_lookup(userdb_lookup(user->user)->objects, obj_name, &n_objs);
+    const struct multimap_list *list = nc->multimap_lookup(userdb_lookup(user->user)->objects, obj_name, &n_objs);
 
     if(!list)
     {
-        if(!room_obj_get(user->room, obj_name))
-            send_msg(user, "I don't know what that is.\n");
+        if(!nc->room_obj_get(user->room, obj_name))
+            nc->send_msg(user, "I don't know what that is.\n");
         else
-            send_msg(user, "You don't have that.\n");
+            nc->send_msg(user, "You don't have that.\n");
         return;
     }
 
@@ -526,18 +540,18 @@ static void eat_exec(struct verb_t *verb, char *args, user_t *user)
 
     if(!strcmp(obj->name, "some food"))
     {
-        send_msg(user, "That tasted horrible.\n");
+        nc->send_msg(user, "That tasted horrible.\n");
     }
     else
     {
         char buf[MSG_MAX];
-        send_msg(user, "You forcibly shove %s down your throat, and start choking.\n",
-                 format_noun(buf, sizeof(buf), obj->name, n_objs, obj->default_article, false));
+        nc->send_msg(user, "You forcibly shove %s down your throat, and start choking.\n",
+                 nc->format_noun(buf, sizeof(buf), obj->name, n_objs, obj->default_article, false));
 
         /* TODO: kill player */
     }
 
-    userdb_del_obj(user->user, obj_name);
+    nc->userdb_del_obj(user->user, obj_name);
 }
 
 static void shake_exec(struct verb_t *verb, char *args, user_t *user)
@@ -548,18 +562,18 @@ static void shake_exec(struct verb_t *verb, char *args, user_t *user)
 
     if(!obj_name)
     {
-        send_msg(user, "You must supply an object.\n");
+        nc->send_msg(user, "You must supply an object.\n");
         return;
     }
 
     size_t n_objs_room, n_objs_inv;
-    const struct multimap_list *list_room = room_obj_get_size(user->room, obj_name, &n_objs_room);
+    const struct multimap_list *list_room = nc->room_obj_get_size(user->room, obj_name, &n_objs_room);
 
-    const struct multimap_list *list_inv = multimap_lookup(userdb_lookup(user->user)->objects, obj_name, &n_objs_inv);
+    const struct multimap_list *list_inv = nc->multimap_lookup(userdb_lookup(user->user)->objects, obj_name, &n_objs_inv);
 
     if(!list_room && !list_inv)
     {
-        send_msg(user, "I don't know what that is.\n");
+        nc->send_msg(user, "I don't know what that is.\n");
         return;
     }
 
@@ -567,18 +581,86 @@ static void shake_exec(struct verb_t *verb, char *args, user_t *user)
     {
         struct object_t *obj = list_room->val;
         if(!strcmp(obj->name, "trees"))
-            send_msg(user, "You begin to shake a tree, and notice a coconut begin to fall from the air.  As you try to get your hand up to block it, you feel the impact as it lands on your head.\n");
+            nc->send_msg(user, "You begin to shake a tree, and notice a coconut begin to fall from the air.  As you try to get your hand up to block it, you feel the impact as it lands on your head.\n");
         else
-            send_msg(user, "You don't have that.\n");
+            nc->send_msg(user, "You don't have that.\n");
     }
     else if(list_inv)
     {
         struct object_t *obj = list_inv->val;
         char buf[MSG_MAX];
-        send_msg(user, "Shaking %s seems to have no effect.\n",
-                 format_noun(buf, sizeof(buf), obj->name,
+        nc->send_msg(user, "Shaking %s seems to have no effect.\n",
+                 nc->format_noun(buf, sizeof(buf), obj->name,
                              n_objs_inv, obj->default_article,
                              false));
+    }
+}
+
+static struct unix_cmd_t {
+    const char *cmd;
+    void (*cb)(user_t *user, char *saveptr);
+}  cmds[] = {
+    { "ls", ls_cb },
+    { "cat", cat_cb },
+    { "exit", exit_cb },
+    { "ftp", ftp_cb },
+    { "rlogin", rlogin_cb },
+};
+
+static void pokey_unix_command(user_t *user, char *data)
+{
+    static void *cmd_map = NULL;
+    char *save;
+    char *cmd = strtok_r(data, WSPACE, &save);
+
+}
+
+/* this is called each time the user types a line at pokey */
+
+static void console_cb(user_t *user, char *data, size_t len)
+{
+    struct dunnet_user *du = userdb_lookup(user->user)->userdata;
+    /* we use their state data to decide how to interpret it */
+    switch(du->console_state)
+    {
+    case POKEY_LOGIN:
+        if(!du->state_data.pokey_login.prompt_pass)
+        {
+            if(!strcmp(data, "toukmond"))
+                du->state_data.pokey_login.correct_user = true;
+            du->state_data.pokey_login.prompt_pass = true;
+            send_msg(user, "password: ");
+        }
+        else
+        {
+            if(!strcmp(data, "robert") && du->state_data.pokey_login.correct_user)
+            {
+                du->console_state = POKEY_SHELL;
+                send_msg(user, "\n\nWelcome to Unix\n\nPlease clean up your directories.  The filesystem is getting full.\nOur tcp/ip link to gamma is a little flaky, but seems to work.\nThe current version of ftp can only send files from your home\ndirectory, and deletes them after they are sent!  Be careful.\n\nNote: Restricted bourne shell in use.\n\n");
+                send_msg(user, "$ ");
+            }
+            else
+            {
+                send_msg(user, "login incorrect\n");
+                if(++du->state_data.pokey_login.fails >= 3)
+                    child_toggle_rawmode(user, NULL);
+                else
+                {
+                    du->state_data.pokey_login.prompt_pass = false;
+                    send_msg(user, "\n\n\nUNIX System V, Release 2.2 (pokey)\n\nlogin: ");
+                }
+            }
+        }
+        break;
+    case POKEY_SHELL:
+
+        pokey_unix_command(user, data);
+
+        send_msg(user, "$ ");
+        break;
+    default:
+        send_msg(user, "FIXME");
+        break;
     }
 }
 
@@ -587,9 +669,9 @@ static void type_exec(struct verb_t *verb, char *args, user_t *user)
     (void) verb;
     (void) args;
 
-    struct room_t *room = room_get(user->room);
+    struct room_t *room = nc->room_get(user->room);
     if(strcmp(room->data.uniq_id, "computer_room"))
-        send_msg(user, "There is nothing here on which you could type.\n");
+        nc->send_msg(user, "There is nothing here on which you could type.\n");
     else
     {
         bool *b = room->userdata;
@@ -597,12 +679,43 @@ static void type_exec(struct verb_t *verb, char *args, user_t *user)
         /* computer is not active */
         if(!*b)
         {
-            send_msg(user, "You type on the keyboard, but your characters do not even echo.\n");
+            nc->send_msg(user, "You type on the keyboard, but your characters do not even echo.\n");
             return;
         }
         else
         {
-            send_msg(user, "FIXME\n");
+            struct userdata_t *data = nc->userdb_lookup(user->user);
+            if(!data->userdata)
+                data->userdata = calloc(1, sizeof(struct dunnet_user));
+
+            struct dunnet_user *du = data->userdata;
+            if(du->console_state != POKEY_LOGIN &&
+               du->console_state != POKEY_SHELL &&
+               du->console_state != POKEY_FTP)
+            {
+                du->console_state = POKEY_LOGIN;
+                du->state_data.pokey_login.prompt_pass = false;
+                du->state_data.pokey_login.fails = 0;
+                send_msg(user, "\n\n\nUNIX System V, Release 2.2 (pokey)\n\nlogin: ");
+            }
+            else
+            {
+                /* print the prompts */
+                switch(du->console_state)
+                {
+                case POKEY_LOGIN:
+                    if(du->state_data.pokey_login.prompt_pass)
+                        send_msg(user, "password: ");
+                    else
+                        send_msg(user, "\n\n\nUNIX System V, Release 2.2 (pokey)\n\nlogin: ");
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            /* all lines typed are now passed directly to us */
+            nc->child_toggle_rawmode(user, console_cb);
         }
     }
 }
@@ -636,6 +749,32 @@ void netcosm_world_simulation_cb(void)
     /* do nothing */
     //printf("callback\n");
     return;
+}
+
+void netcosm_write_userdata_cb(int fd, void *userdata)
+{
+    struct dunnet_user *user = userdata;
+    if(user)
+    {
+        /* we have data */
+        write_bool(fd, true);
+        write_int(fd, user->console_state);
+    }
+    else
+        /* no user data */
+        write_bool(fd, false);
+}
+
+void *netcosm_read_userdata_cb(int fd)
+{
+    if(read_bool(fd))
+    {
+        struct dunnet_user *user = calloc(1, sizeof(*user));
+        user->console_state = read_int(fd);
+        return user;
+    }
+    else
+        return NULL;
 }
 
 /* 100 ms */

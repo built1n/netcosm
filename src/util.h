@@ -23,6 +23,11 @@
 
 #define WSPACE " \t\r\n"
 
+/* convenience macros */
+#define ARRAYLEN(x) (sizeof(x)/sizeof(x[0]))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+#define MIN(a,b) (((a)<(b))?(a):(b))
+
 /* utility functions */
 void __attribute__((noreturn,format(printf,1,2))) error(const char *fmt, ...);
 void __attribute__((format(printf,4,5))) debugf_real(const char*, int, const char*, const char *fmt, ...);
@@ -47,6 +52,9 @@ uint64_t read_uint64(int fd);
 
 void write_size(int fd, size_t);
 size_t read_size(int fd);
+
+void write_int(int fd, int i);
+int read_int(int fd);
 
 bool is_vowel(char c);
 

@@ -45,6 +45,10 @@ extern size_t netcosm_world_sz;
 extern void (*netcosm_world_simulation_cb)(void);
 extern unsigned netcosm_world_simulation_interval;
 
+/* user data callback */
+extern void (*netcosm_write_userdata_cb)(int fd, void *ptr);
+extern void* (*netcosm_read_userdata_cb)(int fd);
+
 extern const char *netcosm_world_name;
 #endif
 

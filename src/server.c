@@ -48,7 +48,7 @@ static char *module_handle = NULL;
 /* save after every X changes to the world state */
 #define SAVE_INTERVAL 10
 
-/* saves state periodically */
+/* saves game state periodically */
 void server_save_state(bool force)
 {
     if(!are_child)
@@ -230,6 +230,9 @@ static void load_worldfile(void)
                 error("have simulation callback, but no interval specified");
         }
     }
+
+    netcosm_write_userdata_cb = dlsym(module_handle, "netcosm_write_userdata_cb");
+    netcosm_read_userdata_cb = dlsym(module_handle, "netcosm_read_userdata_cb");
 
     if(access(WORLDFILE, F_OK) < 0)
     {
@@ -483,6 +486,11 @@ static void parse_args(int argc, char *argv[])
                     goto retry;
                 }
             }
+        }
+        else
+        {
+            debugf("Unknown argument `%s'\n", argv[i]);
+            exit(0);
         }
     }
 }

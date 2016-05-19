@@ -38,6 +38,8 @@ static volatile sig_atomic_t output_locked = 0;
 
 char *current_user = NULL;
 
+bool child_rawmode = false;
+
 bool poll_requests(void);
 
 void out_raw(const void *buf, size_t len)
@@ -160,6 +162,7 @@ tryagain:
                     if(len <= 0)
                         error("lost connection");
 
+                    /* null-terminate */
                     buf[CLIENT_READ_SZ - 1] = '\0';
 
                     enum telnet_status ret = telnet_parse_data((unsigned char*)buf + bufidx, len);
@@ -609,42 +612,46 @@ auth:
 
     while(1)
     {
-        out(">> ");
+        if(!child_rawmode)
+            out(">> ");
         char *line = client_read();
         char *orig = strdup(line);
         char *save = NULL;
 
-        char *tok = strtok_r(line, WSPACE, &save);
-
-        if(!tok)
-            goto next_cmd;
-
-        all_upper(tok);
-
-        const struct client_cmd *cmd = hash_lookup(cmd_map, tok);
-        if(cmd && cmd->cb && (!cmd->admin_only || (cmd->admin_only && are_admin)))
+        if(!child_rawmode)
         {
-            int ret = cmd->cb(&save);
-            switch(ret)
-            {
-            case CMD_OK:
+            char *tok = strtok_r(line, WSPACE, &save);
+
+            if(!tok)
                 goto next_cmd;
-            case CMD_LOGOUT:
-                free(line);
-                free(orig);
-                goto auth;
-            case CMD_QUIT:
-                free(line);
-                free(orig);
-                goto done;
-            default:
-                error("client: bad callback return value");
+
+            all_upper(tok);
+
+            const struct client_cmd *cmd = hash_lookup(cmd_map, tok);
+            if(cmd && cmd->cb && (!cmd->admin_only || (cmd->admin_only && are_admin)))
+            {
+                int ret = cmd->cb(&save);
+                switch(ret)
+                {
+                case CMD_OK:
+                    goto next_cmd;
+                case CMD_LOGOUT:
+                    free(line);
+                    free(orig);
+                    goto auth;
+                case CMD_QUIT:
+                    free(line);
+                    free(orig);
+                    goto done;
+                default:
+                    error("client: bad callback return value");
+                }
             }
-        }
-        else if(cmd && cmd->admin_only && !are_admin)
-        {
-            out("You are not allowed to do that.\n");
-            goto next_cmd;
+            else if(cmd && cmd->admin_only && !are_admin)
+            {
+                out("You are not allowed to do that.\n");
+                goto next_cmd;
+            }
         }
 
         /* if we can't handle it, let the master process try */

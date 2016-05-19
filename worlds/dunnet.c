@@ -596,6 +596,7 @@ static void shake_exec(struct verb_t *verb, char *args, user_t *user)
     }
 }
 
+#if 0
 static struct unix_cmd_t {
     const char *cmd;
     void (*cb)(user_t *user, char *saveptr);
@@ -606,6 +607,7 @@ static struct unix_cmd_t {
     { "ftp", ftp_cb },
     { "rlogin", rlogin_cb },
 };
+#endif
 
 static void pokey_unix_command(user_t *user, char *data)
 {
